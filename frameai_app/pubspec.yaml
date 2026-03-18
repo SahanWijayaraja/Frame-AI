@@ -1,0 +1,31 @@
+name: frameai_app
+description: FrameAI - Real-Time AI Composition Coach
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_overlay_window: ^0.4.0
+  tflite_flutter: ^0.10.4
+  image: ^4.1.3
+  screenshot: ^2.1.0
+  camera: ^0.10.5+9
+  permission_handler: ^11.1.0
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/yolov8n_int8.tflite
+    - assets/models/deeplabv3.tflite
+    - assets/models/midas_small.tflite
+    - assets/models/nima_mobilenet.tflite
