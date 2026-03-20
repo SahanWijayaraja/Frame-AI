@@ -2,39 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'camera_screen.dart';
 
-// This runs inside the floating overlay window
-// It listens for the open_camera message from the trigger button
-class OverlayService extends StatefulWidget {
-  const OverlayService({super.key});
+class OverlayApp extends StatelessWidget {
+  const OverlayApp({super.key});
 
   @override
-  State<OverlayService> createState() => _OverlayServiceState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(),
+      home: const OverlayHome(),
+    );
+  }
 }
 
-class _OverlayServiceState extends State<OverlayService> {
+class OverlayHome extends StatefulWidget {
+  const OverlayHome({super.key});
+
+  @override
+  State<OverlayHome> createState() => _OverlayHomeState();
+}
+
+class _OverlayHomeState extends State<OverlayHome>
+    with SingleTickerProviderStateMixin {
+
   bool _cameraOpen = false;
+  late AnimationController _pulse;
+  late Animation<double> _anim;
 
   @override
   void initState() {
     super.initState();
-    // Listen for messages from the overlay trigger button
-    FlutterOverlayWindow.overlayListener.listen((data) {
-      if (data == 'open_camera' && mounted) {
-        setState(() => _cameraOpen = true);
-        // Expand overlay to full screen for camera
-        FlutterOverlayWindow.resizeOverlay(
-          WindowSize.fullCover,
-          WindowSize.fullCover,
-          true,
-        );
-      }
-    });
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.9, end: 1.1).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
   }
 
-  void _closeCamera() {
-    setState(() => _cameraOpen = false);
-    // Shrink back to small button size
-    FlutterOverlayWindow.resizeOverlay(70, 70, true);
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openCamera() async {
+    await FlutterOverlayWindow.resizeOverlay(
+      WindowSize.fullCover,
+      WindowSize.fullCover,
+      true,
+    );
+    if (mounted) setState(() => _cameraOpen = true);
+  }
+
+  Future<void> _closeCamera() async {
+    if (mounted) setState(() => _cameraOpen = false);
+    await FlutterOverlayWindow.resizeOverlay(70, 70, true);
   }
 
   @override
@@ -42,8 +66,38 @@ class _OverlayServiceState extends State<OverlayService> {
     if (_cameraOpen) {
       return CameraScreen(onClose: _closeCamera);
     }
-    // Show nothing when camera is closed
-    // The trigger button is shown by OverlayTriggerButton in main.dart
-    return const SizedBox.shrink();
+    return Material(
+      color: Colors.transparent,
+      child: GestureDetector(
+        onTap: _openCamera,
+        child: AnimatedBuilder(
+          animation: _anim,
+          builder: (context, child) => Transform.scale(
+            scale: _anim.value,
+            child: child,
+          ),
+          child: Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF6B2B),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF6B2B).withAlpha(120),
+                  blurRadius: 12,
+                  spreadRadius: 3,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.center_focus_strong,
+              color: Colors.black,
+              size: 28,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

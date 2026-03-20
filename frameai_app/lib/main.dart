@@ -1,52 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:camera/camera.dart';
+import 'overlay_service.dart';
 
-// Global camera list — loaded once at startup
 List<CameraDescription> globalCameras = [];
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Load available cameras before app starts
   try {
     globalCameras = await availableCameras();
   } catch (e) {
     globalCameras = [];
   }
-
   runApp(const FrameAIApp());
 }
 
-// Entry point when running as overlay
 @pragma("vm:entry-point")
 void overlayMain() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const OverlayEntryApp());
-}
-
-// Minimal app wrapper for overlay entry point
-class OverlayEntryApp extends StatelessWidget {
-  const OverlayEntryApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
-      home: const OverlayRoot(),
-    );
-  }
-}
-
-// Root widget shown inside the overlay window
-class OverlayRoot extends StatelessWidget {
-  const OverlayRoot({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const OverlayTriggerButton();
-  }
+  runApp(const OverlayApp());
 }
 
 class FrameAIApp extends StatelessWidget {
@@ -114,22 +86,20 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _statusMessage = 'Please grant permission first.');
       return;
     }
-
     await FlutterOverlayWindow.showOverlay(
-      enableDrag:       true,
-      overlayTitle:     'FrameAI',
-      overlayContent:   'FrameAI is running',
-      flag:             OverlayFlag.defaultFlag,
-      visibility:       NotificationVisibility.visibilityPublic,
-      positionGravity:  PositionGravity.auto,
-      width:            70,
-      height:           70,
+      enableDrag:      true,
+      overlayTitle:    'FrameAI',
+      overlayContent:  'FrameAI is running',
+      flag:            OverlayFlag.defaultFlag,
+      visibility:      NotificationVisibility.visibilityPublic,
+      positionGravity: PositionGravity.auto,
+      width:           70,
+      height:          70,
     );
-
     if (mounted) {
       setState(() {
-        _overlayActive  = true;
-        _statusMessage  = 'FrameAI is active! Open your camera app and tap the orange button.';
+        _overlayActive = true;
+        _statusMessage = 'FrameAI active! Tap the orange button.';
       });
     }
   }
@@ -172,8 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 8),
               const Text('Real-Time Composition Coach',
                   style: TextStyle(fontSize: 14,
-                      color: Color(0xFF888888),
-                      letterSpacing: 1)),
+                      color: Color(0xFF888888), letterSpacing: 1)),
               const SizedBox(height: 48),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -201,8 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: const Text('REQUEST PERMISSION',
                       style: TextStyle(fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1)),
+                          fontWeight: FontWeight.bold, letterSpacing: 1)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -224,8 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Text(
                     _overlayActive ? 'STOP FRAMEAI' : 'START FRAMEAI',
                     style: const TextStyle(fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5),
+                        fontWeight: FontWeight.bold, letterSpacing: 1.5),
                   ),
                 ),
               ),
@@ -234,87 +201,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 'How to use:\n'
                 '1. Tap REQUEST PERMISSION and allow\n'
                 '2. Tap START FRAMEAI\n'
-                '3. Tap the orange button floating on screen\n'
+                '3. Tap the orange floating button\n'
                 '4. Frame your shot and tap ANALYSE',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13,
                     color: Color(0xFF666666), height: 1.8),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// The small floating orange button shown in the overlay
-class OverlayTriggerButton extends StatefulWidget {
-  const OverlayTriggerButton({super.key});
-
-  @override
-  State<OverlayTriggerButton> createState() =>
-      _OverlayTriggerButtonState();
-}
-
-class _OverlayTriggerButtonState extends State<OverlayTriggerButton>
-    with SingleTickerProviderStateMixin {
-
-  late AnimationController _pulse;
-  late Animation<double>   _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 1500))
-      ..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.9, end: 1.1).animate(
-        CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  void _openCamera() {
-    // Send message to overlay to open camera screen
-    FlutterOverlayWindow.shareData('open_camera');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: GestureDetector(
-        onTap: _openCamera,
-        child: AnimatedBuilder(
-          animation: _anim,
-          builder: (context, child) => Transform.scale(
-            scale: _anim.value,
-            child: child,
-          ),
-          child: Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFF6B2B),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFFF6B2B).withAlpha(100),
-                  blurRadius: 12,
-                  spreadRadius: 3,
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.center_focus_strong,
-              color: Colors.black,
-              size: 28,
-            ),
           ),
         ),
       ),
