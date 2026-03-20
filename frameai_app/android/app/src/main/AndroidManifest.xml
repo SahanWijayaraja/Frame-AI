@@ -1,19 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Float above other apps (the core FrameAI feature) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-
-    <!-- Capture screen content -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
-
-    <!-- Camera access -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.CAMERA"/>
-
-    <!-- Keep screen on while analysing -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-
-    <!-- Internet not needed — all AI runs offline -->
 
     <application
         android:label="FrameAI"
@@ -21,7 +12,6 @@
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
 
-        <!-- Main app activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -42,11 +32,14 @@
             </intent-filter>
         </activity>
 
-        <!-- Overlay service — this is what floats above the camera app -->
         <service
-            android:name="com.tkclkk.flutter_overlay_window.OverlayService"
+            android:name="flutter.overlay.window.flutter_overlay_window.OverlayService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection"/>
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="camera_composition_coach"/>
+        </service>
 
         <meta-data
             android:name="flutterEmbedding"
