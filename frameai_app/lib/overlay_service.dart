@@ -49,9 +49,9 @@ class _OverlayHomeState extends State<OverlayHome>
 
   Future<void> _openCamera() async {
     await FlutterOverlayWindow.resizeOverlay(
-      WindowSize.fullCover,
-      WindowSize.fullCover,
-      true,
+      WindowSize.matchParent,
+      WindowSize.matchParent,
+      false,
     );
     if (mounted) setState(() => _cameraOpen = true);
   }

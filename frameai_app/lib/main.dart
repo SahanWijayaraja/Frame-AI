@@ -16,8 +16,13 @@ void main() async {
 }
 
 @pragma("vm:entry-point")
-void overlayMain() {
+void overlayMain() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    globalCameras = await availableCameras();
+  } catch (e) {
+    globalCameras = [];
+  }
   runApp(const OverlayApp());
 }
 
