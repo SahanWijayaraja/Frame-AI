@@ -19,24 +19,25 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
 
-  CameraController?   _controller;
+  CameraController?  _controller;
   bool _isInitialised = false;
   bool _isAnalysing   = false;
   bool _showResults   = false;
   bool _isSaving      = false;
-  CompositionResult?  _result;
-  DetectedObject?     _liveSubject;
-  String _errorMessage  = '';
-  String _savedMessage  = '';
+  FlashMode _flashMode = FlashMode.off;   // Flash OFF by default
+  CompositionResult? _result;
+  DetectedObject?    _liveSubject;
+  String _errorMessage = '';
+  String _toastMessage = '';
 
   final CompositionAnalyzer _analyzer = CompositionAnalyzer();
-  late AnimationController  _gridPulse;
+  late AnimationController  _gridAnim;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _gridPulse = AnimationController(
+    _gridAnim = AnimationController(
       vsync: this, duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
     _initCamera();
@@ -46,7 +47,7 @@ class _CameraScreenState extends State<CameraScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _gridPulse.dispose();
+    _gridAnim.dispose();
     _controller?.dispose();
     _analyzer.dispose();
     super.dispose();
@@ -78,16 +79,29 @@ class _CameraScreenState extends State<CameraScreen>
     );
     try {
       await controller.initialize();
+      // Explicitly set flash OFF — no automatic flash ever
+      await controller.setFlashMode(FlashMode.off);
       if (mounted) {
         setState(() {
           _controller    = controller;
           _isInitialised = true;
           _errorMessage  = '';
+          _flashMode     = FlashMode.off;
         });
       }
     } catch (e) {
       if (mounted) setState(() => _errorMessage = 'Camera error: $e');
     }
+  }
+
+  // ── Flash toggle ──────────────────────────────────────────
+  Future<void> _toggleFlash() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    final next = _flashMode == FlashMode.off ? FlashMode.torch : FlashMode.off;
+    try {
+      await _controller!.setFlashMode(next);
+      setState(() => _flashMode = next);
+    } catch (_) {}
   }
 
   // ── Shutter — save photo to gallery ──────────────────────
@@ -97,16 +111,18 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       final file = await _controller!.takePicture();
       await Gal.putImage(file.path);
-      if (mounted) {
-        setState(() => _savedMessage = 'Photo saved  ✓');
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) setState(() => _savedMessage = '');
-        });
-      }
+      _showToast('Photo saved ✓');
     } catch (_) {
-      if (mounted) setState(() => _savedMessage = 'Could not save photo');
+      _showToast('Could not save photo');
     }
     if (mounted) setState(() => _isSaving = false);
+  }
+
+  void _showToast(String msg) {
+    setState(() => _toastMessage = msg);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _toastMessage = '');
+    });
   }
 
   // ── Analyse — capture + run AI ────────────────────────────
@@ -119,10 +135,9 @@ class _CameraScreenState extends State<CameraScreen>
       final bytes = await file.readAsBytes();
       final image = img.decodeImage(bytes);
 
-      // Run live subject detection for overlay
       if (image != null) {
         final dets = await _analyzer.yolo.detect(image);
-        _liveSubject = _analyzer.yolo.getPrimarySubject(dets);
+        if (mounted) setState(() => _liveSubject = _analyzer.yolo.getPrimarySubject(dets));
       }
 
       final result = await _analyzer.analyseImage(bytes.toList());
@@ -133,13 +148,8 @@ class _CameraScreenState extends State<CameraScreen>
           _result       = result;
         });
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isAnalysing  = false;
-          _errorMessage = 'Analysis failed. Try again.';
-        });
-      }
+    } catch (_) {
+      if (mounted) setState(() { _isAnalysing = false; _errorMessage = 'Analysis failed. Try again.'; });
     }
   }
 
@@ -163,18 +173,13 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  // ── Top bar ───────────────────────────────────────────────
+  // ── Top bar: FrameAI title + Flash button + NIMA badge ────
   Widget _buildTopBar() {
+    final flashOn = _flashMode == FlashMode.torch;
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end:   Alignment.bottomCenter,
-          colors: [Color(0xE5000000), Colors.transparent],
-        ),
-      ),
+      color: Colors.black,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -185,8 +190,27 @@ class _CameraScreenState extends State<CameraScreen>
               fontWeight: FontWeight.bold, letterSpacing: 2,
             ),
           ),
-          // NIMA score badge after analysis
-          if (_result != null)
+          // Flash toggle button
+          GestureDetector(
+            onTap: _toggleFlash,
+            child: Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: flashOn ? const Color(0xFFFFD600) : const Color(0x22FFFFFF),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                flashOn ? Icons.flash_on : Icons.flash_off,
+                color: flashOn ? Colors.black : Colors.white54,
+                size: 20,
+              ),
+            ),
+          ),
+          // NIMA badge or toast
+          if (_toastMessage.isNotEmpty)
+            Text(_toastMessage,
+                style: const TextStyle(color: Color(0xFF00D4AA), fontSize: 12))
+          else if (_result != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -202,39 +226,53 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
               ),
             ),
-          if (_savedMessage.isNotEmpty)
-            Text(
-              _savedMessage,
-              style: const TextStyle(color: Color(0xFF00D4AA), fontSize: 12),
-            ),
         ],
       ),
     );
   }
 
-  // ── Camera area — 3:4 aspect ratio ───────────────────────
+  // ── Camera area — 3:4 aspect ratio, no distortion ─────────
   Widget _buildCameraArea() {
     return LayoutBuilder(builder: (context, constraints) {
-      // Calculate 3:4 (width:height) preview box
-      final maxW  = constraints.maxWidth;
-      final maxH  = constraints.maxHeight;
-      final prevW = maxW;
-      final prevH = (prevW * 4 / 3).clamp(0.0, maxH);
+      final maxW = constraints.maxWidth;
+      final maxH = constraints.maxHeight;
+
+      // 3:4 ratio = width:height (portrait). Fit within available space.
+      double prevW, prevH;
+      if (maxH / maxW >= 4 / 3) {
+        // Height limited — fill width
+        prevW = maxW;
+        prevH = maxW * 4 / 3;
+      } else {
+        // Width limited — fill height
+        prevH = maxH;
+        prevW = maxH * 3 / 4;
+      }
 
       return Stack(
-        alignment: Alignment.topCenter,
+        alignment: Alignment.center,
         children: [
-          // Black bars to fill remaining space
+          // Background
           Positioned.fill(child: Container(color: Colors.black)),
 
-          // Camera preview
+          // 3:4 preview box — use AspectRatio to prevent squishing
           SizedBox(
             width:  prevW,
             height: prevH,
             child: ClipRect(
               child: Stack(children: [
+                // Camera preview — AspectRatio prevents distortion
                 if (_isInitialised && _controller != null)
-                  Positioned.fill(child: CameraPreview(_controller!)),
+                  Positioned.fill(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width:  _controller!.value.previewSize?.height ?? prevW,
+                        height: _controller!.value.previewSize?.width  ?? prevH,
+                        child: CameraPreview(_controller!),
+                      ),
+                    ),
+                  ),
 
                 if (!_isInitialised && _errorMessage.isEmpty)
                   const Center(
@@ -259,22 +297,22 @@ class _CameraScreenState extends State<CameraScreen>
                     ),
                   ),
 
-                // Rule-of-thirds grid (always visible, subtle)
+                // Grid + subject overlay
                 Positioned.fill(
                   child: AnimatedBuilder(
-                    animation: _gridPulse,
+                    animation: _gridAnim,
                     builder: (_, __) => CustomPaint(
                       painter: CameraOverlayPainter(
                         result:    _result,
                         subject:   _liveSubject,
                         showGrid:  true,
-                        animValue: _gridPulse.value,
+                        animValue: _gridAnim.value,
                       ),
                     ),
                   ),
                 ),
 
-                // Analysing spinner
+                // Analysing overlay
                 if (_isAnalysing)
                   Container(
                     color: Colors.black54,
@@ -302,7 +340,7 @@ class _CameraScreenState extends State<CameraScreen>
                     ),
                   ),
 
-                // Results overlay — pinned to bottom of preview
+                // Results panel — slides up from bottom of preview
                 if (_showResults && _result != null)
                   Positioned(
                     left: 0, right: 0, bottom: 0,
@@ -319,7 +357,7 @@ class _CameraScreenState extends State<CameraScreen>
     });
   }
 
-  // ── Bottom bar — shutter + analyse ───────────────────────
+  // ── Bottom bar — Analyse + Shutter + Close ────────────────
   Widget _buildBottomBar() {
     return Container(
       height: 110,
@@ -328,15 +366,13 @@ class _CameraScreenState extends State<CameraScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          // Analyse button
+          // ANALYSE button
           GestureDetector(
             onTap: _isAnalysing ? null : _analyse,
             child: Container(
               width: 100, height: 46,
               decoration: BoxDecoration(
-                color: _isAnalysing
-                    ? const Color(0x55FF6B2B)
-                    : const Color(0xFFFF6B2B),
+                color: _isAnalysing ? const Color(0x55FF6B2B) : const Color(0xFFFF6B2B),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: _isAnalysing ? [] : [
                   BoxShadow(
@@ -360,7 +396,7 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
 
-          // Shutter button (classic circular)
+          // Shutter button
           GestureDetector(
             onTap: _isSaving ? null : _shutter,
             child: Container(
@@ -368,7 +404,6 @@ class _CameraScreenState extends State<CameraScreen>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 3),
-                color: Colors.transparent,
               ),
               child: Center(
                 child: Container(
@@ -382,24 +417,20 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
 
-          // Grid toggle / results dismiss
+          // Close results button
           GestureDetector(
             onTap: _showResults ? _closeResults : null,
             child: Container(
               width: 46, height: 46,
               decoration: BoxDecoration(
-                color: _showResults
-                    ? const Color(0x33FF6B2B)
-                    : const Color(0x22FFFFFF),
+                color: _showResults ? const Color(0x33FF6B2B) : const Color(0x22FFFFFF),
                 borderRadius: BorderRadius.circular(23),
                 border: Border.all(
-                  color: _showResults
-                      ? const Color(0xFFFF6B2B)
-                      : Colors.white24,
+                  color: _showResults ? const Color(0xFFFF6B2B) : Colors.white24,
                 ),
               ),
               child: Icon(
-                _showResults ? Icons.close : Icons.info_outline,
+                _showResults ? Icons.close : Icons.photo_camera_outlined,
                 color: _showResults ? const Color(0xFFFF6B2B) : Colors.white54,
                 size: 20,
               ),
