@@ -8,9 +8,7 @@ import 'camera_overlay_painter.dart';
 import 'main.dart';
 
 class CameraScreen extends StatefulWidget {
-  final VoidCallback onClose;
-
-  const CameraScreen({super.key, required this.onClose});
+  const CameraScreen({super.key});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -247,21 +245,7 @@ class _CameraScreenState extends State<CameraScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
 
-                    // Close button
-                    GestureDetector(
-                      onTap: widget.onClose,
-                      child: Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: Colors.white30),
-                        ),
-                        child: const Icon(Icons.close,
-                            color: Colors.white, size: 20),
-                      ),
-                    ),
+                    const SizedBox(width: 40), // Spacer where close button was
 
                     // FrameAI title
                     const Text('FrameAI',
