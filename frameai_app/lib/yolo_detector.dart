@@ -72,8 +72,8 @@ class YoloDetector {
 
       // Preprocess input based on tensor type (int8/uint8/float32)
       final inputInfo = _interpreter!.getInputTensor(0);
-      final isInt8    = inputInfo.type == TfLiteType.int8;
-      final isUint8   = inputInfo.type == TfLiteType.uint8;
+      final isInt8    = inputInfo.type == TfLiteType.INT8;
+      final isUint8   = inputInfo.type == TfLiteType.UINT8;
 
       Object inputTensor;
       if (isInt8 || isUint8) {
