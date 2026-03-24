@@ -356,8 +356,8 @@ class CompositionAnalyzer {
 
       // Preprocess input based on tensor type
       final inputInfo = _deeplabInterpreter!.getInputTensor(0);
-      final isInt8    = inputInfo.type == TfLiteType.INT8;
-      final isUint8   = inputInfo.type == TfLiteType.UINT8;
+      final isInt8    = inputInfo.type == TfLiteType.kTfLiteInt8;
+      final isUint8   = inputInfo.type == TfLiteType.kTfLiteUInt8;
 
       Object input;
       if (isInt8 || isUint8) {
@@ -488,8 +488,8 @@ class CompositionAnalyzer {
 
       // Preprocess input based on tensor type
       final inputInfo = _midasInterpreter!.getInputTensor(0);
-      final isInt8    = inputInfo.type == TfLiteType.INT8;
-      final isUint8   = inputInfo.type == TfLiteType.UINT8;
+      final isInt8    = inputInfo.type == TfLiteType.kTfLiteInt8;
+      final isUint8   = inputInfo.type == TfLiteType.kTfLiteUInt8;
 
       Object input;
       if (isInt8 || isUint8) {
