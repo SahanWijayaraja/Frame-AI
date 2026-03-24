@@ -315,10 +315,10 @@ class CompositionAnalyzer {
       final direction = lrSim >= tbSim ? 'left-right' : 'top-bottom';
 
       // KEY FIX: Rescale so that:
-      // ≤ 0.68 → score 0  (typical natural scene, not symmetric)
-      // 0.85  → score ~50 (partially symmetric)
-      // 0.93+ → score 100 (strong symmetry — reflections, arches)
-      final score = ((bestSim - 0.68) / 0.25 * 100).round().clamp(0, 100);
+      // ≤ 0.75 → score 0  (typical natural scene, not symmetric)
+      // 0.88  → score ~50 (partially symmetric)
+      // 0.94+ → score 100 (strong symmetry — reflections, arches)
+      final score = ((bestSim - 0.75) / 0.19 * 100).round().clamp(0, 100);
 
       String tip;
       if (score >= 70) {
@@ -354,13 +354,29 @@ class CompositionAnalyzer {
       const dlSize = 257;
       final resized = img.copyResize(image, width: dlSize, height: dlSize);
 
-      // Normalise to [0, 1]
-      final input = List.generate(1, (_) => List.generate(
-        dlSize, (y) => List.generate(dlSize, (x) {
-          final p = resized.getPixel(x, y);
-          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-        }),
-      ));
+      // Preprocess input based on tensor type
+      final inputInfo = _deeplabInterpreter!.getInputTensor(0);
+      final isInt8    = inputInfo.type == TFLiteType.int8;
+      final isUint8   = inputInfo.type == TFLiteType.uint8;
+
+      Object input;
+      if (isInt8 || isUint8) {
+        input = List.generate(1, (_) => List.generate(
+          dlSize, (y) => List.generate(dlSize, (x) {
+            final p = resized.getPixel(x, y);
+            if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
+            return [p.r.toInt() - 128, p.g.toInt() - 128, p.b.toInt() - 128];
+          }),
+        ));
+      } else {
+        // Normalise to [0, 1]
+        input = List.generate(1, (_) => List.generate(
+          dlSize, (y) => List.generate(dlSize, (x) {
+            final p = resized.getPixel(x, y);
+            return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+          }),
+        ));
+      }
 
       final outShape = _deeplabInterpreter!.getOutputTensor(0).shape;
       // Expected: [1, 257, 257, 21]
@@ -470,13 +486,29 @@ class CompositionAnalyzer {
       const mdSize = 256;
       final resized = img.copyResize(image, width: mdSize, height: mdSize);
 
-      // MiDaS Small normalisation: scale to [−1, +1]
-      final input = List.generate(1, (_) => List.generate(
-        mdSize, (y) => List.generate(mdSize, (x) {
-          final p = resized.getPixel(x, y);
-          return [p.r / 127.5 - 1.0, p.g / 127.5 - 1.0, p.b / 127.5 - 1.0];
-        }),
-      ));
+      // Preprocess input based on tensor type
+      final inputInfo = _midasInterpreter!.getInputTensor(0);
+      final isInt8    = inputInfo.type == TFLiteType.int8;
+      final isUint8   = inputInfo.type == TFLiteType.uint8;
+
+      Object input;
+      if (isInt8 || isUint8) {
+        input = List.generate(1, (_) => List.generate(
+          mdSize, (y) => List.generate(mdSize, (x) {
+            final p = resized.getPixel(x, y);
+            if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
+            return [(p.r.toInt() - 128), (p.g.toInt() - 128), (p.b.toInt() - 128)];
+          }),
+        ));
+      } else {
+        // MiDaS Small normalisation: scale to [−1, +1]
+        input = List.generate(1, (_) => List.generate(
+          mdSize, (y) => List.generate(mdSize, (x) {
+            final p = resized.getPixel(x, y);
+            return [p.r / 127.5 - 1.0, p.g / 127.5 - 1.0, p.b / 127.5 - 1.0];
+          }),
+        ));
+      }
 
       final outShape = _midasInterpreter!.getOutputTensor(0).shape;
       // Typical shape: [1, 256, 256] or [1, H, W]
@@ -598,12 +630,14 @@ class CompositionAnalyzer {
       final sumE = exps.reduce((a, b) => a + b);
       final prob = exps.map((e) => e / sumE).toList();
 
-      // Weighted mean: ratings 1–10
+      // weighted mean: ratings 1–10 (MATCHING COLAB LOGIC)
       double mean = 0;
-      for (int i = 0; i < 10; i++) mean += prob[i] * (i + 1);
+      for (int i = 0; i < 10; i++) {
+        mean += prob[i] * (i + 1);
+      }
 
-      // Typical NIMA range: 4.0–7.0. Map [3.5, 7.5] → [0, 100]
-      return ((mean - 3.5) / 4.0 * 100).clamp(0, 100);
+      // Colab output is 1-10. Map [4.0, 7.5] -> [0, 100] for the UI
+      return ((mean - 4.0) / 3.5 * 100).clamp(0.0, 100.0);
     } catch (_) {
       return 50.0;
     }

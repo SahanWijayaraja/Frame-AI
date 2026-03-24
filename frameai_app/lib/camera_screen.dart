@@ -165,7 +165,15 @@ class _CameraScreenState extends State<CameraScreen>
         child: Column(
           children: [
             _buildTopBar(),
-            Expanded(child: _buildCameraArea()),
+            Expanded(
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  _buildCameraArea(),
+                  _buildOverlays(),
+                ],
+              ),
+            ),
             _buildBottomBar(),
           ],
         ),
@@ -233,126 +241,98 @@ class _CameraScreenState extends State<CameraScreen>
 
   // ── Camera area — 3:4 aspect ratio, no distortion ─────────
   Widget _buildCameraArea() {
+    if (!_isInitialised || _controller == null) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFFF6B2B)));
+    }
+
     return LayoutBuilder(builder: (context, constraints) {
       final maxW = constraints.maxWidth;
       final maxH = constraints.maxHeight;
 
-      // 3:4 ratio = width:height (portrait). Fit within available space.
-      double prevW, prevH;
+      double uiW, uiH;
       if (maxH / maxW >= 4 / 3) {
-        // Height limited — fill width
-        prevW = maxW;
-        prevH = maxW * 4 / 3;
+        uiW = maxW; uiH = maxW * 4 / 3;
       } else {
-        // Width limited — fill height
-        prevH = maxH;
-        prevW = maxH * 3 / 4;
+        uiH = maxH; uiW = maxH * 3 / 4;
       }
 
-      return Stack(
-        alignment: Alignment.center,
-        children: [
-          // Background
-          Positioned.fill(child: Container(color: Colors.black)),
+      final sensorAt = _controller!.value.aspectRatio; 
 
-          // 3:4 preview box — use AspectRatio to prevent squishing
-          SizedBox(
-            width:  prevW,
-            height: prevH,
-            child: ClipRect(
-              child: Stack(children: [
-                // Camera preview — AspectRatio prevents distortion
-                if (_isInitialised && _controller != null)
-                  Positioned.fill(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width:  _controller!.value.previewSize?.height ?? prevW,
-                        height: _controller!.value.previewSize?.width  ?? prevH,
-                        child: CameraPreview(_controller!),
-                      ),
-                    ),
-                  ),
-
-                if (!_isInitialised && _errorMessage.isEmpty)
-                  const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: Color(0xFFFF6B2B)),
-                        SizedBox(height: 12),
-                        Text('Starting camera…',
-                            style: TextStyle(color: Colors.white54, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-
-                if (_errorMessage.isNotEmpty)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(_errorMessage,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
-                    ),
-                  ),
-
-                // Grid + subject overlay
-                Positioned.fill(
-                  child: AnimatedBuilder(
-                    animation: _gridAnim,
-                    builder: (_, __) => CustomPaint(
-                      painter: CameraOverlayPainter(
-                        result:    _result,
-                        subject:   _liveSubject,
-                        showGrid:  true,
-                        animValue: _gridAnim.value,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Analysing overlay
-                if (_isAnalysing)
-                  Container(
-                    color: Colors.black54,
-                    child: const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 52, height: 52,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3, color: Color(0xFFFF6B2B),
-                            ),
-                          ),
-                          SizedBox(height: 14),
-                          Text('ANALYSING…', style: TextStyle(
-                            color: Color(0xFFFF6B2B), fontSize: 12,
-                            fontWeight: FontWeight.bold, letterSpacing: 3,
-                          )),
-                          SizedBox(height: 6),
-                          Text('Running 4 AI models', style: TextStyle(
-                            color: Colors.white54, fontSize: 11,
-                          )),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Results panel — slides up from bottom of preview
-                if (_showResults && _result != null)
-                  Positioned(
-                    left: 0, right: 0, bottom: 0,
-                    child: ScoreBoxWidget(
-                      result:  _result!,
-                      onClose: _closeResults,
-                    ),
-                  ),
-              ]),
+      return Center(
+        child: SizedBox(
+          width:  uiW,
+          height: uiH,
+          child: ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.center,
+              child: AspectRatio(
+                aspectRatio: 1 / sensorAt,
+                child: CameraPreview(_controller!),
+              ),
             ),
           ),
-        ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildOverlays() {
+    return LayoutBuilder(builder: (context, constraints) {
+      final maxW = constraints.maxWidth;
+      final maxH = constraints.maxHeight;
+      double uiW, uiH;
+      if (maxH / maxW >= 4 / 3) { uiW = maxW; uiH = maxW * 4 / 3; }
+      else { uiH = maxH; uiW = maxH * 3 / 4; }
+
+      return SizedBox(
+        width: uiW, height: uiH,
+        child: Stack(children: [
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _gridAnim,
+              builder: (_, __) => CustomPaint(
+                painter: CameraOverlayPainter(
+                  result:    _result,
+                  subject:   _liveSubject,
+                  showGrid:  true,
+                  animValue: _gridAnim.value,
+                ),
+              ),
+            ),
+          ),
+
+          if (_isAnalysing)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 52, height: 52,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3, color: Color(0xFFFF6B2B),
+                      ),
+                    ),
+                    SizedBox(height: 14),
+                    Text('ANALYSING…', style: TextStyle(
+                      color: Color(0xFFFF6B2B), fontSize: 12,
+                      fontWeight: FontWeight.bold, letterSpacing: 3,
+                    )),
+                  ],
+                ),
+              ),
+            ),
+
+          if (_showResults && _result != null)
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: ScoreBoxWidget(
+                result:  _result!,
+                onClose: _closeResults,
+              ),
+            ),
+        ]),
       );
     });
   }

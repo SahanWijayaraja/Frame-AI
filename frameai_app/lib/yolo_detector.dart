@@ -70,17 +70,39 @@ class YoloDetector {
       const inputSize = 320;
       final resized = img.copyResize(image, width: inputSize, height: inputSize);
 
-      // Build float32 input [1, 320, 320, 3]
-      final inputTensor = List.generate(
-        1, (_) => List.generate(
-          inputSize, (y) => List.generate(
-            inputSize, (x) {
-              final pixel = resized.getPixel(x, y);
-              return [pixel.r / 255.0, pixel.g / 255.0, pixel.b / 255.0];
-            },
+      // Preprocess input based on tensor type (int8/uint8/float32)
+      final inputInfo = _interpreter!.getInputTensor(0);
+      final isInt8    = inputInfo.type == TFLiteType.int8;
+      final isUint8   = inputInfo.type == TFLiteType.uint8;
+
+      Object inputTensor;
+      if (isInt8 || isUint8) {
+        // Quantize: [0, 255] -> [-128, 127] or [0, 255]
+        final bytes = List.generate(
+          1, (_) => List.generate(
+            inputSize, (y) => List.generate(
+              inputSize, (x) {
+                final p = resized.getPixel(x, y);
+                if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
+                return [(p.r.toInt() - 128), (p.g.toInt() - 128), (p.b.toInt() - 128)];
+              },
+            ),
           ),
-        ),
-      );
+        );
+        inputTensor = bytes;
+      } else {
+        // Standard float32 [0, 1]
+        inputTensor = List.generate(
+          1, (_) => List.generate(
+            inputSize, (y) => List.generate(
+              inputSize, (x) {
+                final p = resized.getPixel(x, y);
+                return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+              },
+            ),
+          ),
+        );
+      }
 
       final outShape = _interpreter!.getOutputTensor(0).shape;
       // Support both [1,84,8400] (transposed) and [1,8400,84] (NHWC)
