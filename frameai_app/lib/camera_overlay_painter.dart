@@ -3,17 +3,17 @@ import 'composition_analyzer.dart';
 import 'yolo_detector.dart';
 
 // Draws visual overlays on top of the camera viewfinder:
-//   - Rule of thirds grid (orange dashed lines)
-//   - Subject bounding box with glow outline
-//   - Direction arrow hint (move left / right / up / down)
-//   - Leading line highlight
-//   - Depth gradient strip for perspective
+//   - Rule of thirds grid (always-on, thin white lines)
+//   - Intersection dots (subtle orange)
+//   - Subject bounding box with animated glow
+//   - Direction arrow hint (move to third intersection)
+//   - Perspective tint strip at bottom edge
 
 class CameraOverlayPainter extends CustomPainter {
   final CompositionResult? result;
   final DetectedObject?    subject;
   final bool               showGrid;
-  final double             animValue;  // 0.0 to 1.0 for pulse animation
+  final double             animValue;
 
   const CameraOverlayPainter({
     this.result,
@@ -24,260 +24,185 @@ class CameraOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (result == null) return;
-
     final W = size.width;
     final H = size.height;
 
-    // Draw in this order so nothing important gets covered
-    if (showGrid)        _drawGrid(canvas, W, H);
-    if (subject != null) _drawSubjectGlow(canvas, W, H);
-                         _drawArrowHint(canvas, W, H);
-                         _drawPerspectiveStrip(canvas, W, H);
+    if (showGrid) _drawGrid(canvas, W, H);
+    if (subject != null) _drawSubjectBox(canvas, W, H);
+    if (subject != null && result != null) _drawArrow(canvas, W, H);
+    if (result != null) _drawAngleStrip(canvas, W, H);
   }
 
-  // ── Rule of thirds grid ───────────────────────────────────
+  // ── Rule-of-thirds grid ───────────────────────────────────
   void _drawGrid(Canvas canvas, double W, double H) {
-    final paint = Paint()
-      ..color       = const Color(0x80FF6B2B)
-      ..strokeWidth = 0.8
+    // Thin semi-transparent white lines — always visible
+    final linePaint = Paint()
+      ..color       = const Color(0x40FFFFFF)
+      ..strokeWidth = 0.7
       ..style       = PaintingStyle.stroke;
 
-    // Vertical lines at 1/3 and 2/3
-    canvas.drawLine(Offset(W/3, 0),   Offset(W/3, H),   paint);
-    canvas.drawLine(Offset(W*2/3, 0), Offset(W*2/3, H), paint);
+    // Vertical
+    canvas.drawLine(Offset(W/3, 0),   Offset(W/3, H),   linePaint);
+    canvas.drawLine(Offset(W*2/3, 0), Offset(W*2/3, H), linePaint);
+    // Horizontal
+    canvas.drawLine(Offset(0, H/3),   Offset(W, H/3),   linePaint);
+    canvas.drawLine(Offset(0, H*2/3), Offset(W, H*2/3), linePaint);
 
-    // Horizontal lines at 1/3 and 2/3
-    canvas.drawLine(Offset(0, H/3),   Offset(W, H/3),   paint);
-    canvas.drawLine(Offset(0, H*2/3), Offset(W, H*2/3), paint);
-
-    // Intersection dots — highlight the 4 power points
+    // Power-point dots — orange tint
     final dotPaint = Paint()
-      ..color = const Color(0xCCFF6B2B)
+      ..color = const Color(0x80FF6B2B)
       ..style = PaintingStyle.fill;
 
     for (final fx in [1/3.0, 2/3.0]) {
       for (final fy in [1/3.0, 2/3.0]) {
-        canvas.drawCircle(Offset(W*fx, H*fy), 3.0, dotPaint);
+        canvas.drawCircle(Offset(W*fx, H*fy), 4.0, dotPaint);
       }
     }
   }
 
   // ── Subject bounding box with pulsing glow ────────────────
-  void _drawSubjectGlow(Canvas canvas, double W, double H) {
+  void _drawSubjectBox(Canvas canvas, double W, double H) {
     if (subject == null) return;
 
-    final left   = subject!.x       * W;
-    final top    = subject!.y       * H;
-    final right  = (subject!.x + subject!.width)  * W;
-    final bottom = (subject!.y + subject!.height) * H;
-    final rect   = Rect.fromLTRB(left, top, right, bottom);
-    final rrect  = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+    final l = subject!.x * W;
+    final t = subject!.y * H;
+    final r = (subject!.x + subject!.width)  * W;
+    final b = (subject!.y + subject!.height) * H;
 
-    // Outer glow — pulses with animValue
-    final glowOpacity = (0.3 + animValue * 0.3).clamp(0.0, 1.0);
-    final glowPaint   = Paint()
-      ..color       = Color.fromRGBO(255, 107, 43, glowOpacity)
-      ..strokeWidth = 8
+    final rect  = Rect.fromLTRB(l, t, r, b);
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+
+    // Animated outer glow
+    final glowAlpha = (80 + (animValue * 80)).round().clamp(0, 200);
+    final glowPaint = Paint()
+      ..color       = Color.fromARGB(glowAlpha, 255, 107, 43)
+      ..strokeWidth = 10
       ..style       = PaintingStyle.stroke
-      ..maskFilter  = const MaskFilter.blur(BlurStyle.normal, 6);
+      ..maskFilter  = const MaskFilter.blur(BlurStyle.normal, 8);
     canvas.drawRRect(rrect, glowPaint);
 
-    // Inner sharp border
-    final borderPaint = Paint()
+    // Sharp border
+    canvas.drawRRect(rrect, Paint()
       ..color       = const Color(0xCCFF6B2B)
       ..strokeWidth = 2
-      ..style       = PaintingStyle.stroke;
-    canvas.drawRRect(rrect, borderPaint);
+      ..style       = PaintingStyle.stroke);
 
-    // Corner accents — small L-shapes at each corner
-    _drawCornerAccents(canvas, left, top, right, bottom);
+    // Corner L-marks
+    _corners(canvas, l, t, r, b);
 
-    // Subject label at top of box
-    _drawLabel(
-      canvas,
-      subject!.className,
-      Offset(left + 4, top - 14),
-    );
+    // Label
+    _label(canvas, subject!.className, Offset(l + 4, t - 16));
   }
 
-  // Small L-shaped corner marks
-  void _drawCornerAccents(Canvas canvas,
-      double l, double t, double r, double b) {
-    const len   = 10.0;
-    final paint = Paint()
-      ..color       = Colors.white
-      ..strokeWidth = 2
-      ..style       = PaintingStyle.stroke;
-
-    // Top-left
-    canvas.drawLine(Offset(l, t+len), Offset(l, t), paint);
-    canvas.drawLine(Offset(l, t),     Offset(l+len, t), paint);
-    // Top-right
-    canvas.drawLine(Offset(r-len, t), Offset(r, t), paint);
-    canvas.drawLine(Offset(r, t),     Offset(r, t+len), paint);
-    // Bottom-left
-    canvas.drawLine(Offset(l, b-len), Offset(l, b), paint);
-    canvas.drawLine(Offset(l, b),     Offset(l+len, b), paint);
-    // Bottom-right
-    canvas.drawLine(Offset(r-len, b), Offset(r, b), paint);
-    canvas.drawLine(Offset(r, b),     Offset(r, b-len), paint);
+  void _corners(Canvas canvas, double l, double t, double r, double b) {
+    const len = 12.0;
+    final p = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke;
+    // TL
+    canvas.drawLine(Offset(l, t+len), Offset(l, t), p);
+    canvas.drawLine(Offset(l, t), Offset(l+len, t), p);
+    // TR
+    canvas.drawLine(Offset(r-len, t), Offset(r, t), p);
+    canvas.drawLine(Offset(r, t), Offset(r, t+len), p);
+    // BL
+    canvas.drawLine(Offset(l, b-len), Offset(l, b), p);
+    canvas.drawLine(Offset(l, b), Offset(l+len, b), p);
+    // BR
+    canvas.drawLine(Offset(r-len, b), Offset(r, b), p);
+    canvas.drawLine(Offset(r, b), Offset(r, b-len), p);
   }
 
-  // ── Direction arrow hint ──────────────────────────────────
-  void _drawArrowHint(Canvas canvas, double W, double H) {
-    if (subject == null || result == null) return;
+  // ── Direction arrow → nearest third intersection ──────────
+  void _drawArrow(Canvas canvas, double W, double H) {
+    if (result == null || subject == null) return;
+    if (result!.ruleOfThirds.score >= 75) return;
 
-    final r1Score = result!.ruleOfThirds.score;
-    if (r1Score >= 75) return;   // already good — no arrow needed
-
-    // Find the nearest third intersection
-    const intersections = [
+    const pts = [
       [1/3.0, 1/3.0], [2/3.0, 1/3.0],
       [1/3.0, 2/3.0], [2/3.0, 2/3.0],
     ];
 
     final cx = subject!.centerX;
     final cy = subject!.centerY;
-
-    List<double> nearest = intersections[0];
-    double minDist       = double.infinity;
-    for (final pt in intersections) {
+    List<double> near = pts[0];
+    double minD = double.infinity;
+    for (final pt in pts) {
       final d = (cx-pt[0])*(cx-pt[0]) + (cy-pt[1])*(cy-pt[1]);
-      if (d < minDist) { minDist = d; nearest = pt; }
+      if (d < minD) { minD = d; near = pt; }
     }
 
-    // Arrow from subject centre toward nearest intersection
-    final startX = cx        * W;
-    final startY = cy        * H;
-    final endX   = nearest[0]* W;
-    final endY   = nearest[1]* H;
+    final sx = cx * W, sy = cy * H;
+    final ex = near[0] * W, ey = near[1] * H;
+    final dx = ex - sx, dy = ey - sy;
+    final mag = dx*dx + dy*dy;
+    if (mag < 400) return;
 
-    final dx   = endX - startX;
-    final dy   = endY - startY;
-    final dist = (dx*dx + dy*dy).abs();
-    if (dist < 10) return;   // already close enough
+    final len  = 44.0;
+    final sq   = mag > 0 ? mag : 1.0;
+    final ndx  = dx / sq * len;
+    final ndy  = dy / sq * len;
 
-    final len    = 40.0;
-    final mag    = (dx*dx + dy*dy) > 0 ? (dx*dx + dy*dy) : 1.0;
-    final normX  = dx / mag * len;
-    final normY  = dy / mag * len;
-
-    final paint = Paint()
+    final p = Paint()
       ..color       = const Color(0xCCFFFFFF)
-      ..strokeWidth = 2
+      ..strokeWidth = 2.0
       ..style       = PaintingStyle.stroke;
 
-    canvas.drawLine(
-      Offset(startX, startY),
-      Offset(startX + normX, startY + normY),
-      paint,
-    );
+    canvas.drawLine(Offset(sx, sy), Offset(sx+ndx, sy+ndy), p);
 
-    // Arrowhead
-    _drawArrowHead(
-      canvas,
-      Offset(startX, startY),
-      Offset(startX + normX, startY + normY),
-      paint,
-    );
+    // Arrow head
+    const hs = 9.0;
+    final hn  = mag > 0 ? mag * 0.5 : 1.0;
+    final unx = dx / hn, uny = dy / hn;
+    final tip = Offset(sx+ndx, sy+ndy);
+    canvas.drawLine(tip, Offset(tip.dx - hs*(unx-uny), tip.dy - hs*(uny+unx)), p);
+    canvas.drawLine(tip, Offset(tip.dx - hs*(unx+uny), tip.dy - hs*(uny-unx)), p);
 
-    // "Move here" label near the arrowhead
-    final hDir = cx > nearest[0] + 0.05 ? '← left'  :
-                 cx < nearest[0] - 0.05 ? 'right →'  : '';
-    final vDir = cy > nearest[1] + 0.05 ? '↑ up'     :
-                 cy < nearest[1] - 0.05 ? 'down ↓'   : '';
+    // Direction text
+    final hDir = cx > near[0]+0.05 ? '← left' : cx < near[0]-0.05 ? 'right →' : '';
+    final vDir = cy > near[1]+0.05 ? '↑ up'   : cy < near[1]-0.05 ? 'down ↓'  : '';
     final dir  = [hDir, vDir].where((s) => s.isNotEmpty).join('  ');
-
-    if (dir.isNotEmpty) {
-      _drawLabel(
-        canvas,
-        dir,
-        Offset(startX + normX, startY + normY - 16),
-      );
-    }
+    if (dir.isNotEmpty) _label(canvas, dir, Offset(sx+ndx, sy+ndy-18));
   }
 
-  void _drawArrowHead(Canvas canvas, Offset from, Offset to, Paint paint) {
-    final dx     = to.dx - from.dx;
-    final dy     = to.dy - from.dy;
-    final mag    = (dx*dx + dy*dy) > 0
-        ? (dx*dx + dy*dy) * 0.5
-        : 1.0;
-    final normX  = dx / mag;
-    final normY  = dy / mag;
-    const size   = 8.0;
-
-    final left  = Offset(
-      to.dx - size * (normX - normY),
-      to.dy - size * (normY + normX),
-    );
-    final right = Offset(
-      to.dx - size * (normX + normY),
-      to.dy - size * (normY - normX),
-    );
-
-    canvas.drawLine(to, left,  paint);
-    canvas.drawLine(to, right, paint);
-  }
-
-  // ── Perspective depth strip at bottom ─────────────────────
-  void _drawPerspectiveStrip(Canvas canvas, double W, double H) {
+  // ── Angle colour strip at bottom ──────────────────────────
+  void _drawAngleStrip(Canvas canvas, double W, double H) {
     if (result == null) return;
-
     final angle = result!.angleLabel;
-    if (angle == 'EYE LEVEL') return;   // no strip for eye level
+    if (angle == 'EYE LEVEL') return;
 
-    final color = angle == 'LOW ANGLE'  ? const Color(0x80FF6B2B) :
-                  angle == 'HIGH ANGLE' ? const Color(0x804A9EFF) :
-                  const Color(0x80A855F7);
-
-    // Small coloured strip along the bottom edge
-    final stripPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
+    final color = angle == 'LOW ANGLE'  ? const Color(0x60FF6B2B)
+                : angle == 'HIGH ANGLE' ? const Color(0x604A9EFF)
+                : const Color(0x60A855F7);
 
     canvas.drawRect(
-      Rect.fromLTWH(0, H - 6, W, 6),
-      stripPaint,
+      Rect.fromLTWH(0, H - 5, W, 5),
+      Paint()..color = color,
     );
-
-    // Angle label
-    _drawLabel(canvas, angle, Offset(8, H - 18));
   }
 
-  // ── Helper: draw a small text label with dark background ──
-  void _drawLabel(Canvas canvas, String text, Offset position) {
+  // ── Text label helper ─────────────────────────────────────
+  void _label(Canvas canvas, String text, Offset pos) {
     final tp = TextPainter(
       text: TextSpan(
         text:  text,
         style: const TextStyle(
-          fontSize:   9,
-          color:      Color(0xFFFF6B2B),
-          fontWeight: FontWeight.bold,
-          height:     1.2,
+          fontSize: 10, color: Color(0xFFFF6B2B),
+          fontWeight: FontWeight.bold, height: 1.2,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
-    // Dark background pill
-    final bgRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        position.dx - 3,
-        position.dy - 2,
-        tp.width  + 6,
-        tp.height + 4,
-      ),
-      const Radius.circular(4),
-    );
-
     canvas.drawRRect(
-      bgRect,
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(pos.dx-3, pos.dy-2, tp.width+6, tp.height+4),
+        const Radius.circular(4),
+      ),
       Paint()..color = const Color(0xCC000000),
     );
-
-    tp.paint(canvas, position);
+    tp.paint(canvas, pos);
   }
 
   @override
@@ -288,17 +213,14 @@ class CameraOverlayPainter extends CustomPainter {
       old.animValue != animValue;
 }
 
-// Widget that wraps the painter with a pulse animation
+// Widget wrapper with pulse animation
 class CameraOverlayWidget extends StatefulWidget {
   final CompositionResult? result;
   final DetectedObject?    subject;
   final bool               showGrid;
 
   const CameraOverlayWidget({
-    super.key,
-    this.result,
-    this.subject,
-    this.showGrid = true,
+    super.key, this.result, this.subject, this.showGrid = true,
   });
 
   @override
@@ -308,43 +230,35 @@ class CameraOverlayWidget extends StatefulWidget {
 class _CameraOverlayWidgetState extends State<CameraOverlayWidget>
     with SingleTickerProviderStateMixin {
 
-  late AnimationController _controller;
-  late Animation<double>   _animation;
+  late AnimationController _ctrl;
+  late Animation<double>   _anim;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync:    this,
-      duration: const Duration(milliseconds: 1500),
+    _ctrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _anim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, _) {
-        return CustomPaint(
-          painter: CameraOverlayPainter(
-            result:    widget.result,
-            subject:   widget.subject,
-            showGrid:  widget.showGrid,
-            animValue: _animation.value,
-          ),
-          child: const SizedBox.expand(),
-        );
-      },
+      animation: _anim,
+      builder: (_, __) => CustomPaint(
+        painter: CameraOverlayPainter(
+          result:    widget.result,
+          subject:   widget.subject,
+          showGrid:  widget.showGrid,
+          animValue: _anim.value,
+        ),
+        child: const SizedBox.expand(),
+      ),
     );
   }
 }
