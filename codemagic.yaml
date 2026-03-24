@@ -1,17 +1,14 @@
 workflows:
   android-debug:
     name: FrameAI Android Debug
+    working_directory: frameai_app
     max_build_duration: 60
     environment:
       flutter: stable
     scripts:
       - name: Get Flutter packages
-        script: |
-          cd frameai_app
-          flutter pub get
+        script: flutter pub get
       - name: Build APK
-        script: |
-          cd frameai_app
-          flutter build apk --debug
+        script: flutter build apk --debug
     artifacts:
-      - frameai_app/build/app/outputs/flutter-apk/app-debug.apk
+      - build/app/outputs/flutter-apk/app-debug.apk
