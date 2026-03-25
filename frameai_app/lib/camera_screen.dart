@@ -170,7 +170,6 @@ class _CameraScreenState extends State<CameraScreen>
       _showResults = false; 
       _errorMessage = ''; 
       _frozenFrame  = null;
-      _edgeMaskImage = null;
     });
 
     try {
