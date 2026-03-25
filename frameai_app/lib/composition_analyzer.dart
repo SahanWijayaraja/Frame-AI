@@ -511,19 +511,20 @@ class CompositionAnalyzer {
       final isInt8      = inputTensor.type == TfLiteType.kTfLiteInt8;
       
       final inputData = isInt8 ? Int8List(1 * mdSize * mdSize * 3) : Float32List(1 * mdSize * mdSize * 3);
+      final data = inputData as List;
       int pIdx = 0;
       for (int y = 0; y < mdSize; y++) {
         for (int x = 0; x < mdSize; x++) {
           final p = resized.getPixel(x, y);
           if (isInt8) {
-            inputData[pIdx++] = (p.r.toInt() - 128);
-            inputData[pIdx++] = (p.g.toInt() - 128);
-            inputData[pIdx++] = (p.b.toInt() - 128);
+            data[pIdx++] = (p.r.toInt() - 128);
+            data[pIdx++] = (p.g.toInt() - 128);
+            data[pIdx++] = (p.b.toInt() - 128);
           } else {
             // Normalise to [-1, 1] per Colab
-            inputData[pIdx++] = p.r / 127.5 - 1.0;
-            inputData[pIdx++] = p.g / 127.5 - 1.0;
-            inputData[pIdx++] = p.b / 127.5 - 1.0;
+            data[pIdx++] = p.r / 127.5 - 1.0;
+            data[pIdx++] = p.g / 127.5 - 1.0;
+            data[pIdx++] = p.b / 127.5 - 1.0;
           }
         }
       }
