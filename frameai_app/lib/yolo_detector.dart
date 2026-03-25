@@ -107,7 +107,8 @@ class YoloDetector {
       if (isOutInt8) {
         final scale = outputTensor.params.scale;
         final zeroPoint = outputTensor.params.zeroPoint;
-        scores = outputData.map((v) => (v - zeroPoint) * scale).toList();
+        final data = outputData as Int8List;
+        scores = data.map((v) => (v - zeroPoint) * scale).toList();
       } else {
         scores = (outputData as Float32List).toList();
       }
