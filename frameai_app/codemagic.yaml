@@ -1,0 +1,38 @@
+workflows:
+  flutter-android:
+    name: FrameAI Android Build
+    max_build_duration: 30
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - common
+      vars:
+        PACKAGE_NAME: "com.sahan.frameai_app"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events:
+        - push
+        - tag
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Build Android APK
+        script: |
+          flutter build apk --release --no-codesign
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients:
+          - $USER_EMAIL # Will use the email of the person who triggered the build
+        notify:
+          success: true
+          failure: true
