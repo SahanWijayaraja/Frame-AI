@@ -109,6 +109,18 @@ class CompositionAnalyzer {
     final weakest = active.isEmpty ? null
         : active.reduce((a, b) => a.score < b.score ? a : b);
 
+    if (subject == null) {
+      return CompositionResult(
+        ruleOfThirds: r1, leadingLines: r2, negativeSpace: r3,
+        symmetry: r4, framing: r5, perspective: r6,
+        overallScore: 0,
+        nimaScore:    nimaScore,
+        bestTip:      'No subject detected.',
+        angleLabel:   'EYE LEVEL',
+        professionalSuggestion: 'Point at a clear subject (person, animal, or object) and tap ANALYSE again. No subject detected.',
+      );
+    }
+
     final suggestion = _suggestion(r1, r2, r3, r4, r5, r6, nimaScore);
     final angle = r6.tip.contains('LOW') ? 'LOW ANGLE' :
                   r6.tip.contains('HIGH') ? 'HIGH ANGLE' : 'EYE LEVEL';
