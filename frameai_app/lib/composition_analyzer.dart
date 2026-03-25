@@ -220,11 +220,14 @@ class CompositionAnalyzer {
 
     final angle = r6.tip.contains('LOW') ? 'LOW ANGLE' : r6.tip.contains('HIGH') ? 'HIGH ANGLE' : 'EYE LEVEL';
     
-    String suggestion = _FeedbackEngine.generateProfessionalSuggestion(active, nimaScore);
-    if (isDepthFallback) {
-      suggestion = 'Composition tips based on nearest dominant object. \$suggestion';
-    } else if (subject == null) {
-      suggestion = 'Look for leading lines! Ensure a clear person/object is in focus for more tips.';
+    String suggestion;
+    if (subject == null) {
+      suggestion = 'Blank frame detected. Please point the camera at a subject or clear landscape.';
+    } else {
+      suggestion = _FeedbackEngine.generateProfessionalSuggestion(active, nimaScore);
+      if (isDepthFallback) {
+        suggestion = 'Composition tips based on nearest dominant object. $suggestion';
+      }
     }
 
     return CompositionResult(
@@ -272,24 +275,25 @@ class CompositionAnalyzer {
     }
 
     // Now evaluate raw depth map for geometric foreground prominence
-    double threshold = maxD * 0.85;
-    int minX = W, minY = H, maxX = 0, maxY = 0, count = 0;
+    // Instead of fixed thresholds, find the 95th percentile (top 5% closest pixels)
+    final flatDepth = depth.expand((r) => r).toList()..sort();
+    final threshold = flatDepth[(flatDepth.length * 0.95).toInt()]; // top 5%
+    
+    int minX = W, minY = H, maxX = 0, maxY = 0;
     for (int y = 0; y < H; y++) {
       for (int x = 0; x < W; x++) {
         if (depth[y][x] >= threshold) {
           if (x < minX) minX = x; if (y < minY) minY = y;
           if (x > maxX) maxX = x; if (y > maxY) maxY = y;
-          count++;
         }
       }
     }
     
-    if (count > (W * H * 0.02)) { // Foreground occupies >2% of image
-      double geoWidth = (maxX - minX) / W;
-      double geoHeight = (maxY - minY) / H;
-      if (bestYoloSubject == null) {
-        return DetectedObject(className: 'foreground object', confidence: 0.8, x: minX / W, y: minY / H, width: geoWidth, height: geoHeight);
-      }
+    double geoWidth = (maxX - minX + 1) / W;
+    double geoHeight = (maxY - minY + 1) / H;
+    
+    if (bestYoloSubject == null) {
+      return DetectedObject(className: 'foreground object', confidence: 0.8, x: minX / W, y: minY / H, width: geoWidth, height: geoHeight);
     }
     return bestYoloSubject;
   }

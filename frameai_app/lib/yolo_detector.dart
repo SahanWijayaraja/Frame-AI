@@ -77,7 +77,8 @@ class YoloDetector {
       // Use typed lists for performance and reliability
       final inputData = isInt8
           ? Int8List(1 * inputSize * inputSize * 3)
-          : Uint8List(1 * inputSize * inputSize * 3);
+          : (isUint8 ? Uint8List(1 * inputSize * inputSize * 3) : Float32List(1 * inputSize * inputSize * 3));
+      
       final data = inputData as List;
       int pixelIdx = 0;
       for (int y = 0; y < inputSize; y++) {
@@ -87,10 +88,14 @@ class YoloDetector {
              data[pixelIdx++] = (p.r.toInt() - 128);
              data[pixelIdx++] = (p.g.toInt() - 128);
              data[pixelIdx++] = (p.b.toInt() - 128);
-          } else {
+          } else if (isUint8) {
              data[pixelIdx++] = p.r.toInt();
              data[pixelIdx++] = p.g.toInt();
              data[pixelIdx++] = p.b.toInt();
+          } else {
+             data[pixelIdx++] = p.r / 255.0;
+             data[pixelIdx++] = p.g / 255.0;
+             data[pixelIdx++] = p.b / 255.0;
           }
         }
       }
@@ -99,17 +104,16 @@ class YoloDetector {
       final outShape     = outputTensor.shape;
       final isOutInt8    = outputTensor.type == TfLiteType.kTfLiteInt8;
       
-      // We expect [1, 84, 8400] or [1, 8400, 84]
       final numElements = outShape.reduce((a, b) => a * b);
       final outputData = isOutInt8 ? Int8List(numElements) : Float32List(numElements);
       
       _interpreter!.run(inputData, outputData);
 
-      // De-quantize if output is INT8
       List<double> scores;
       if (isOutInt8) {
-        final scale = outputTensor.params.scale;
-        final zeroPoint = outputTensor.params.zeroPoint;
+        double scale = outputTensor.params.scale;
+        if (scale == 0.0) scale = 0.00390625; // Fallback if metadata is stripped
+        final int zeroPoint = outputTensor.params.zeroPoint;
         final data = outputData as Int8List;
         scores = data.map((v) => (v - zeroPoint) * scale).toList();
       } else {
