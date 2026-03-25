@@ -61,7 +61,7 @@ class YoloDetector {
 
   Future<List<DetectedObject>> detect(
     img.Image image, {
-    double confidenceThreshold = 0.20,
+    double confidenceThreshold = 0.15,
     int    maxDetections       = 10,
   }) async {
     if (!_isLoaded || _interpreter == null) return [];
@@ -70,87 +70,84 @@ class YoloDetector {
       const inputSize = 320;
       final resized = img.copyResize(image, width: inputSize, height: inputSize);
 
-      // Preprocess input based on tensor type (int8/uint8/float32)
-      final inputInfo = _interpreter!.getInputTensor(0);
-      final isInt8    = inputInfo.type == TfLiteType.kTfLiteInt8;
-      final isUint8   = inputInfo.type == TfLiteType.kTfLiteUInt8;
+      final inputTensor = _interpreter!.getInputTensor(0);
+      final isInt8      = inputTensor.type == TfLiteType.kTfLiteInt8;
+      final isUint8     = inputTensor.type == TfLiteType.kTfLiteUInt8;
 
-      Object inputTensor;
-      if (isInt8 || isUint8) {
-        // Quantize: [0, 255] -> [-128, 127] or [0, 255]
-        final bytes = List.generate(
-          1, (_) => List.generate(
-            inputSize, (y) => List.generate(
-              inputSize, (x) {
-                final p = resized.getPixel(x, y);
-                if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
-                return [(p.r.toInt() - 128), (p.g.toInt() - 128), (p.b.toInt() - 128)];
-              },
-            ),
-          ),
-        );
-        inputTensor = bytes;
-      } else {
-        // Standard float32 [0, 1]
-        inputTensor = List.generate(
-          1, (_) => List.generate(
-            inputSize, (y) => List.generate(
-              inputSize, (x) {
-                final p = resized.getPixel(x, y);
-                return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-              },
-            ),
-          ),
-        );
+      // Use typed lists for performance and reliability
+      final inputData = Uint8List(1 * inputSize * inputSize * 3);
+      int pixelIdx = 0;
+      for (int y = 0; y < inputSize; y++) {
+        for (int x = 0; x < inputSize; x++) {
+          final p = resized.getPixel(x, y);
+          if (isInt8) {
+             inputData[pixelIdx++] = (p.r.toInt() - 128).toUnsigned(8);
+             inputData[pixelIdx++] = (p.g.toInt() - 128).toUnsigned(8);
+             inputData[pixelIdx++] = (p.b.toInt() - 128).toUnsigned(8);
+          } else {
+             inputData[pixelIdx++] = p.r.toInt();
+             inputData[pixelIdx++] = p.g.toInt();
+             inputData[pixelIdx++] = p.b.toInt();
+          }
+        }
       }
 
-      final outShape = _interpreter!.getOutputTensor(0).shape;
-      // Support both [1,84,8400] (transposed) and [1,8400,84] (NHWC)
+      final outputTensor = _interpreter!.getOutputTensor(0);
+      final outShape     = outputTensor.shape;
+      final isOutInt8    = outputTensor.type == TfLiteType.kTfLiteInt8;
+      
+      // We expect [1, 84, 8400] or [1, 8400, 84]
+      final numElements = outShape.reduce((a, b) => a * b);
+      final outputData = isOutInt8 ? Int8List(numElements) : Float32List(numElements);
+      
+      _interpreter!.run(inputData.buffer, outputData.buffer);
+
+      // De-quantize if output is INT8
+      List<double> scores;
+      if (isOutInt8) {
+        final scale = outputTensor.params.scale;
+        final zeroPoint = outputTensor.params.zeroPoint;
+        scores = outputData.map((v) => (v - zeroPoint) * scale).toList();
+      } else {
+        scores = (outputData as Float32List).toList();
+      }
+
       final isTransposed = outShape.length == 3 && outShape[1] == 84;
       final numDet       = isTransposed ? outShape[2] : outShape[1];
       final numCols      = isTransposed ? outShape[1] : outShape[2];
 
-      final outputTensor = List.generate(
-        outShape[0], (_) => List.generate(
-          outShape[1], (_) => List.filled(outShape[2], 0.0),
-        ),
-      );
-
-      _interpreter!.run(inputTensor, outputTensor);
-      final raw = outputTensor[0];
-
       final detections = <DetectedObject>[];
-
       for (int i = 0; i < numDet; i++) {
         double cx, cy, w, h;
         double maxScore = 0;
         int    bestClass = 0;
 
         if (isTransposed) {
-          // raw[row][col] where row = feature dim, col = detection
-          cx = raw[0][i];
-          cy = raw[1][i];
-          w  = raw[2][i];
-          h  = raw[3][i];
-          for (int c = 0; c < 80 && (4 + c) < numCols; c++) {
-            final s = raw[4 + c][i];
+          // data[feature][detection]
+          cx = scores[0 * numDet + i];
+          cy = scores[1 * numDet + i];
+          w  = scores[2 * numDet + i];
+          h  = scores[3 * numDet + i];
+          for (int c = 0; c < 80; c++) {
+            final s = scores[(4 + c) * numDet + i];
             if (s > maxScore) { maxScore = s; bestClass = c; }
           }
         } else {
-          // raw[detection][feature]
-          cx = raw[i][0];
-          cy = raw[i][1];
-          w  = raw[i][2];
-          h  = raw[i][3];
-          for (int c = 0; c < 80 && (4 + c) < numCols; c++) {
-            final s = raw[i][4 + c];
+          // data[detection][feature]
+          final base = i * numCols;
+          cx = scores[base + 0];
+          cy = scores[base + 1];
+          w  = scores[base + 2];
+          h  = scores[base + 3];
+          for (int c = 0; c < 80; c++) {
+            final s = scores[base + 4 + c];
             if (s > maxScore) { maxScore = s; bestClass = c; }
           }
         }
 
         if (maxScore < confidenceThreshold) continue;
 
-        // YOLOv8n INT8 outputs values in [0,320] not [0,1] — normalise
+        // YOLOv8n INT8 usually outputs raw pixel coordinates [0, 320]
         final normCx = (cx / inputSize).clamp(0.0, 1.0);
         final normCy = (cy / inputSize).clamp(0.0, 1.0);
         final normW  = (w  / inputSize).clamp(0.0, 1.0);
@@ -161,7 +158,7 @@ class YoloDetector {
         final bw = normW.clamp(0.0, 1.0 - x);
         final bh = normH.clamp(0.0, 1.0 - y);
 
-        if (bw * bh < 0.005) continue; // skip tiny boxes
+        if (bw * bh < 0.002) continue; // skip tiny noise
 
         detections.add(DetectedObject(
           className:  bestClass < cocoClasses.length ? cocoClasses[bestClass] : 'object',

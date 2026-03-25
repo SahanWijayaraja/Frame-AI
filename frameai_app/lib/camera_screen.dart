@@ -239,7 +239,6 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  // ── Top bar: FrameAI title + Flash button + NIMA badge ────
   Widget _buildTopBar() {
     final flashOn = _flashMode == FlashMode.torch;
     return Container(
@@ -249,14 +248,11 @@ class _CameraScreenState extends State<CameraScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'FrameAI',
-            style: TextStyle(
-              color: Color(0xFFFF6B2B), fontSize: 18,
-              fontWeight: FontWeight.bold, letterSpacing: 2,
-            ),
-          ),
-          // Flash toggle button
+          const Text('FrameAI',
+              style: TextStyle(
+                color: Color(0xFFFF6B2B), fontSize: 18,
+                fontWeight: FontWeight.bold, letterSpacing: 2,
+              )),
           GestureDetector(
             onTap: _toggleFlash,
             child: Container(
@@ -272,7 +268,6 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ),
-          // NIMA badge or toast
           if (_toastMessage.isNotEmpty)
             Text(_toastMessage,
                 style: const TextStyle(color: Color(0xFF00D4AA), fontSize: 12))
@@ -284,13 +279,11 @@ class _CameraScreenState extends State<CameraScreen>
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: const Color(0x66FF6B2B)),
               ),
-              child: Text(
-                'NIMA ${_result!.nimaScore.round()}',
-                style: const TextStyle(
-                  color: Color(0xFFFF6B2B), fontSize: 11,
-                  fontWeight: FontWeight.bold, letterSpacing: 1,
-                ),
-              ),
+              child: Text('NIMA ${_result!.nimaScore.round()}',
+                  style: const TextStyle(
+                    color: Color(0xFFFF6B2B), fontSize: 11,
+                    fontWeight: FontWeight.bold, letterSpacing: 1,
+                  )),
             ),
         ],
       ),

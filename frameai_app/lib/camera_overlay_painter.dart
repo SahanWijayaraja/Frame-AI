@@ -160,6 +160,7 @@ class CameraOverlayPainter extends CustomPainter {
     canvas.drawLine(tip, Offset(tip.dx - hs*(unx+uny), tip.dy - hs*(uny-unx)), p);
 
     // Direction text
+    // dx > 0 = subject is RIGHT of target → label says move left
     final hDir = cx > near[0]+0.05 ? '← left' : cx < near[0]-0.05 ? 'right →' : '';
     final vDir = cy > near[1]+0.05 ? '↑ up'   : cy < near[1]-0.05 ? 'down ↓'  : '';
     final dir  = [hDir, vDir].where((s) => s.isNotEmpty).join('  ');

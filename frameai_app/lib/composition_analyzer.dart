@@ -153,21 +153,22 @@ class CompositionAnalyzer {
     if (score >= 82) {
       tip = 'Perfect power-point alignment.';
     } else {
-      // SMARTER FEEDBACK: Tell them direction
+      // dx > 0 = subject is RIGHT of target → move LEFT
+      // dy > 0 = subject is BELOW target → move UP
       final dx = subject.centerX - nearest[0];
       final dy = subject.centerY - nearest[1];
-      
+
       String hTip = dx > 0.05 ? 'left' : dx < -0.05 ? 'right' : '';
-      String vTip = dy > 0.05 ? 'up' : dy < -0.05 ? 'down' : '';
-      
+      String vTip = dy > 0.05 ? 'up'   : dy < -0.05 ? 'down'  : '';
+
       if (hTip.isNotEmpty && vTip.isNotEmpty) {
-        tip = 'Shift slightly $hTip & $vTip';
+        tip = 'Shift subject $hTip and $vTip';
       } else if (hTip.isNotEmpty) {
-        tip = 'Move subject $hTip';
+        tip = 'Shift subject $hTip';
       } else if (vTip.isNotEmpty) {
-        tip = 'Move subject $vTip';
+        tip = 'Shift subject $vTip';
       } else {
-        tip = 'Align subject with grid intersections';
+        tip = 'Align subject with a grid intersection';
       }
     }
     return RuleResult(ruleName: 'Rule of Thirds', score: score, tip: tip, detected: true);
@@ -259,15 +260,24 @@ class CompositionAnalyzer {
     int    score;
     String tip;
 
-    if (ratio >= 0.08 && ratio <= 0.38) {
-      score = 95;
-      tip   = 'Ideal subject scale and breathing room.';
+    if (ratio < 0.03) {
+      score = (ratio / 0.03 * 30).round();
+      tip   = 'Subject barely visible. Move much closer or zoom in significantly.';
     } else if (ratio < 0.08) {
-      score = (ratio / 0.08 * 80).round();
-      tip   = 'Subject too small. Zoom in or move closer.';
+      score = (30 + (ratio - 0.03) / 0.05 * 40).round();
+      tip   = 'Subject too small. Move closer to fill more of the frame.';
+    } else if (ratio <= 0.20) {
+      score = 95;
+      tip   = 'Ideal — subject and negative space are well balanced.';
+    } else if (ratio <= 0.38) {
+      score = 80;
+      tip   = 'Good subject size. Slight step back would add more breathing room.';
+    } else if (ratio <= 0.60) {
+      score = (80 - ((ratio - 0.38) / 0.22 * 35)).round();
+      tip   = 'Subject fills too much of the frame. Step back for more negative space.';
     } else {
-      score = ((1.0 - ratio) / 0.62 * 80).round();
-      tip   = 'Subject too large. Step back for more negative space.';
+      score = (45 - ((ratio - 0.60) / 0.40 * 45)).round();
+      tip   = 'Subject too close and dominant. Step back significantly.';
     }
 
     return RuleResult(ruleName: 'Negative Space', score: score.clamp(0,100), tip: tip, detected: true);
@@ -645,23 +655,51 @@ class CompositionAnalyzer {
   // ══════════════════════════════════════════════════════════
   String _suggestion(RuleResult r1, RuleResult r2, RuleResult r3,
       RuleResult r4, RuleResult r5, RuleResult r6, double nima) {
-    final active = [r1, r2, r3, r4, r5, r6].where((r) => r.detected && r.score >= 0).toList();
-    if (active.isEmpty) return 'Point at a clear subject and tap ANALYSE for feedback.';
 
-    final issues = active.where((r) => r.score < 70).toList()
+    final active = [r1, r2, r3, r4, r5, r6]
+        .where((r) => r.detected && r.score >= 0).toList();
+    if (active.isEmpty) {
+      return 'Point at a clear subject and tap ANALYSE for feedback.';
+    }
+
+    final issues = active.where((r) => r.score < 65).toList()
       ..sort((a, b) => a.score.compareTo(b.score));
-    final praises = active.where((r) => r.score >= 85).toList();
+    final good   = active.where((r) => r.score >= 80).toList();
+    final nimaStr = nima >= 70 ? 'strong aesthetic quality'
+                  : nima >= 45 ? 'decent aesthetic quality'
+                  : 'low aesthetic score';
 
     if (issues.isEmpty) {
-      return 'Excellent! Professional-grade ${praises.isNotEmpty ? praises.first.ruleName.toLowerCase() : "composition"}.';
+      final goodNames = good.map((r) => r.ruleName.toLowerCase()).toList();
+      if (goodNames.length >= 3) {
+        return 'Well composed shot — ${goodNames.take(2).join(', ')} and more are working well. $nimaStr.';
+      }
+      return 'Solid composition. ${good.first.tip} $nimaStr.';
     }
 
-    // Combine top 2 issues as advice
-    final mainAdvice = issues.first.tip;
-    if (issues.length > 1) {
-      return '$mainAdvice Also: ${issues[1].tip}';
+    final primary   = issues.first;
+    final secondary = issues.length > 1 ? issues[1] : null;
+
+    String intro(RuleResult r) {
+      switch (r.ruleName) {
+        case 'Rule of Thirds'  : return 'Composition could improve — ${r.tip.toLowerCase()}';
+        case 'Leading Lines'   : return 'The shot lacks direction — ${r.tip.toLowerCase()}';
+        case 'Negative Space'  : return 'Framing needs adjustment — ${r.tip.toLowerCase()}';
+        case 'Symmetry'        : return 'Balance could be stronger — ${r.tip.toLowerCase()}';
+        case 'Framing'         : return 'Natural framing is missing — ${r.tip.toLowerCase()}';
+        case 'Perspective'     : return 'Try a different angle — ${r.tip.toLowerCase()}';
+        default                : return r.tip;
+      }
     }
-    return mainAdvice;
+
+    String result = intro(primary);
+    if (secondary != null && (primary.score - secondary.score).abs() < 30) {
+      result += '. Also: ${secondary.tip.toLowerCase()}';
+    }
+    if (good.isNotEmpty) {
+      result += '. ${good.first.ruleName} looks good';
+    }
+    return result;
   }
 
   CompositionResult _errorResult(String msg) {
