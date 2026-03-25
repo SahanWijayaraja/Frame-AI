@@ -50,120 +50,93 @@ class CompositionResult {
     ruleOfThirds, leadingLines, negativeSpace,
     symmetry, framing, perspective,
   ];
-}
-
-class _FeedbackEngine {
+}class _FeedbackEngine {
   static final Random _rng = Random();
 
   static String getPraise() {
-    final phrases = [
-      "Great shot!", "Solid composition.", "Nicely done.",
-      "Excellent eye.", "Beautifully composed.", "Very strong arrangement."
-    ];
-    return phrases[_rng.nextInt(phrases.length)];
+    return ["Masterful composition.", "Excellent visual weight.", "Strong framing.", "Very intentional layout."][_rng.nextInt(4)];
   }
 
   static String getRuleOfThirdsTip(double dx, double dy, bool isGood) {
     if (isGood) {
-      final good = [
-        "Subject perfectly aligns with the power intersections.",
-        "Excellent use of the rule of thirds.",
-        "The rule of thirds placement creates a very balanced feel here."
-      ];
-      return good[_rng.nextInt(good.length)];
+      return ["Subject perfectly anchored on power intersections.", "Balanced visual weight.", "Classic, strong framing."][_rng.nextInt(3)];
     }
-    
     String hTip = dx > 0.05 ? 'left' : dx < -0.05 ? 'right' : '';
     String vTip = dy > 0.05 ? 'up' : dy < -0.05 ? 'down' : '';
-    String dir = [hTip, vTip].where((s) => s.isNotEmpty).join(' and ');
-    if (dir.isEmpty) return "Slightly adjust framing to hit a third intersection.";
+    String dir = [hTip, vTip].where((s) => s.isNotEmpty).join(' & ');
+    if (dir.isEmpty) return "Anchor the subject on a third-line intersection.";
     
-    final tips = [
-      "Try shifting the camera \$dir for a stronger rule of thirds.",
-      "Pan slightly \$dir to place your subject right on a power intersection.",
-      "Moving the subject \$dir will instantly improve the composition's balance."
-    ];
-    return tips[_rng.nextInt(tips.length)];
+    return [
+      "Pan slightly $dir to anchor your subject.",
+      "Shift $dir to hit a power intersection.",
+      "Move $dir for a stronger visual anchor."
+    ][_rng.nextInt(3)];
   }
 
   static String getNegativeSpaceTip(double ratio, bool isLeadRoomGood, bool isGood) {
     if (isGood) {
-      final good = [
-        "The negative space balances the subject perfectly.",
-        "Great breathing room around the subject.",
-        "Excellent spatial balance — not too cramped, not too empty."
-      ];
-      return good[_rng.nextInt(good.length)];
+      return ["Excellent breathing room.", "Perfect spatial balance.", "Negative space carries the subject well."][_rng.nextInt(3)];
     }
     if (ratio < 0.10) {
-      return ["Subject is a bit lost in the frame. Try moving closer.", 
-              "Too much empty space. Fill the frame more with your subject."][_rng.nextInt(2)];
+      return ["Subject lacks impact. Move closer.", "Fill the frame—too much dead space."][_rng.nextInt(2)];
     } else if (ratio > 0.55) {
-      return ["The frame feels cramped. Step back to give the subject room to breathe.",
-              "Try stepping back—the subject needs more negative space around the edges."][_rng.nextInt(2)];
+      return ["Frame feels suffocating. Step back.", "Introduce more 'breathing room' around the subject."][_rng.nextInt(2)];
     } else if (!isLeadRoomGood) {
-      return ["Leave more open space in front of the subject to create 'lead room'.",
-              "Shift the subject to the opposite side to balance the empty space."][_rng.nextInt(2)];
+      return ["Leave more open 'Lead Room' in front.", "Subject needs space to look into."][_rng.nextInt(2)];
     }
-    return "Adjust the negative space to balance the shot better.";
+    return "Balance your negative space.";
   }
 
   static String getLeadingLinesTip(int score) {
     if (score >= 70) {
-      final good = [
-        "Strong leading lines! They guide the viewer right to your subject.",
-        "Excellent use of natural lines to draw the eye inward.",
-        "The converging lines make this a very dynamic composition."
-      ];
-      return good[_rng.nextInt(good.length)];
+      return ["Strong natural geometry.", "Lines pull the eye straight in.", "Excellent visual arrows."][_rng.nextInt(3)];
     } else if (score >= 35) {
-      return ["Subtle leading lines. Align them to point more directly at your subject.",
-              "Try repositioning so the lines guide the eye toward the center."][_rng.nextInt(2)];
+      return ["Subtle lines. Align them to point inward.", "Reposition so lines guide to the center."][_rng.nextInt(2)];
     }
-    return ["No strong leading lines. Use roads, fences, or a shoreline to guide the eye.",
-            "Look for natural paths or corridors to create depth."][_rng.nextInt(2)];
+    return ["Use roads or shores to create depth.", "Look for geometric paths."][_rng.nextInt(2)];
   }
 
   static String getSymmetryTip(int score, String direction) {
     if (score >= 75) {
-      return ["Strong \$direction symmetry detected. Very balanced.",
-              "Excellent symmetry. The reflection or central balance works perfectly.",
-              "Beautiful \$direction balance."][_rng.nextInt(3)];
+      return ["Perfect $direction equilibrium.", "Beautifully balanced reflection.", "Strong intentional centering."][_rng.nextInt(3)];
     } else if (score >= 45) {
-      return ["Partial \$direction symmetry. Center your subject for stronger balance.",
-              "Try squaring up your camera to perfect that \$direction symmetry."][_rng.nextInt(2)];
+      return ["Square up to perfect $direction symmetry.", "Center the subject explicitly."][_rng.nextInt(2)];
     }
-    return ["Low symmetry. Try utilizing reflections, still water, or a centered archway.",
-            "If you want a symmetric shot, perfectly center the subject."][_rng.nextInt(2)];
+    return ["Utilize reflections or archways for symmetry.", "Center perfectly if aiming symmetric."][_rng.nextInt(2)];
   }
 
   static String generateProfessionalSuggestion(List<RuleResult> activeRules, double nima) {
-    if (activeRules.isEmpty) return 'Point at a clear subject and tap ANALYSE for feedback.';
+    if (activeRules.isEmpty) return 'Point at a clear subject for technical coaching.';
 
     final issues = activeRules.where((r) => r.score < 65).toList()
       ..sort((a, b) => a.score.compareTo(b.score));
     final good = activeRules.where((r) => r.score >= 80).toList();
     
-    final nimaStr = nima >= 70 ? 'Amazing lighting and aesthetics.'
-                  : nima >= 45 ? 'Decent aesthetic quality.'
-                  : 'Focus on finding better lighting.';
+    final nimaStr = nima >= 70 ? 'Stunning aesthetics.'
+                  : nima >= 45 ? 'Decent lighting.'
+                  : 'Requires better lighting.';
 
     if (issues.isEmpty) {
       final goodNames = good.map((r) => r.ruleName.toLowerCase()).toList();
-      final goodJoined = goodNames.take(2).join(' and ');
-      return '${getPraise()} $goodJoined are working well. $nimaStr';
+      final goodJoined = goodNames.take(2).join(' & ');
+      return '${getPraise()} $goodJoined working perfectly. $nimaStr';
     }
 
     final primary = issues.first;
-    String text = "\${primary.tip}";
+    String text = "${primary.tip}";
     
-    if (issues.length > 1 && (primary.score - issues[1].score).abs() < 25) {
-      text += " Also: \${issues[1].tip}";
+    if (nima >= 70 && primary.score < 50) {
+      return "Gorgeous light, but framing feels loose. $text";
+    }
+    if (good.isNotEmpty && (primary.score - issues.last.score).abs() > 30) {
+      final strTop = good.first.ruleName.toLowerCase();
+      text = "Solid $strTop, but $text";
+    } else if (issues.length > 1) {
+       text += " Also: ${issues[1].tip}";
     }
     
-    if (good.isNotEmpty) {
-      text += " On the bright side, your \${good.first.ruleName.toLowerCase()} is quite good!";
-    }
+    // Safety crop for extremely long combined strings
+    if (text.length > 100) text = "${primary.tip} $nimaStr";
     
     return text;
   }
