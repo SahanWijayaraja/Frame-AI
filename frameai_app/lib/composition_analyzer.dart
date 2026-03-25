@@ -159,7 +159,7 @@ class CompositionAnalyzer {
       if (d < minDist) { minDist = d; nearest = pt; }
     }
 
-    final score = (max(0.0, 1.0 - minDist / 0.47) * 100).round().clamp(0, 100);
+    final score = (max(0.0, 1.0 - minDist / 0.50) * 100).round().clamp(0, 100);
 
     String tip;
     if (score >= 82) {
@@ -238,13 +238,17 @@ class CompositionAnalyzer {
       // Natural images: ~48–52% converge by chance.
       // Anything >60% = real leading lines toward centre.
       final ratio = converging / total;
-      // Map [0.48 .. 0.80] → [0 .. 100]
-      final score = ((ratio - 0.48) / 0.32 * 100).round().clamp(0, 100);
+      // Match Colab mapping: [0.50 .. 0.82] → [0 .. 100]
+      final score = ((ratio - 0.50) / 0.32 * 100).round().clamp(0, 100);
 
       String tip;
-      if (score >= 70)      tip = 'Great leading lines drawing the eye into the frame.';
-      else if (score >= 40) tip = 'Some directional lines present. Look for stronger paths.';
-      else                  tip = 'No strong leading lines. Try roads, fences, or corridors.';
+      if (score >= 70) {
+        tip = 'Strong leading lines! They guide the viewer right to your subject.';
+      } else if (score >= 35) {
+        tip = 'Subtle leading lines. Align them to point more directly at your subject.';
+      } else {
+        tip = 'No strong leading lines. Use roads, fences, or shoreline to guide the eye.';
+      }
 
       return RuleResult(ruleName: 'Leading Lines', score: score, tip: tip, detected: true);
     } catch (_) {
@@ -272,24 +276,21 @@ class CompositionAnalyzer {
     int    score;
     String tip;
 
-    if (ratio < 0.03) {
-      score = (ratio / 0.03 * 30).round();
-      tip   = 'Subject barely visible. Move much closer or zoom in significantly.';
-    } else if (ratio < 0.08) {
-      score = (30 + (ratio - 0.03) / 0.05 * 40).round();
-      tip   = 'Subject too small. Move closer to fill more of the frame.';
-    } else if (ratio <= 0.20) {
+    if (ratio < 0.05) {
+      score = (ratio / 0.05 * 40).round();
+      tip   = 'Subject too small. Move much closer.';
+    } else if (ratio < 0.10) {
+      score = (40 + (ratio - 0.05) / 0.05 * 50).round();
+      tip   = 'Subject slightly small. Move closer for better presence.';
+    } else if (ratio <= 0.35) {
       score = 95;
-      tip   = 'Ideal — subject and negative space are well balanced.';
-    } else if (ratio <= 0.38) {
-      score = 80;
-      tip   = 'Good subject size. Slight step back would add more breathing room.';
-    } else if (ratio <= 0.60) {
-      score = (80 - ((ratio - 0.38) / 0.22 * 35)).round();
-      tip   = 'Subject fills too much of the frame. Step back for more negative space.';
+      tip   = 'Ideal — subject and negative space are perfectly balanced.';
+    } else if (ratio <= 0.55) {
+      score = (95 - ((ratio - 0.35) / 0.20 * 45)).round();
+      tip   = 'Subject fills {ratio*100:.0f}% — slightly cramped. Step back a little.';
     } else {
-      score = (45 - ((ratio - 0.60) / 0.40 * 45)).round();
-      tip   = 'Subject too close and dominant. Step back significantly.';
+      score = (50 - ((ratio - 0.55) / 0.45 * 50)).round();
+      tip   = 'Subject fills {ratio*100:.0f}% — very tight. Step back for breathing room.';
     }
 
     return RuleResult(ruleName: 'Negative Space', score: score.clamp(0,100), tip: tip, detected: true);
@@ -304,56 +305,60 @@ class CompositionAnalyzer {
   // ══════════════════════════════════════════════════════════
   RuleResult _checkSymmetry(img.Image image) {
     try {
-      final small = img.copyResize(image, width: 64, height: 64);
+      final small = img.copyResize(image, width: 128, height: 128);
       final W = small.width;
       final H = small.height;
 
-      // Left-right comparison
-      double lrDiff = 0;
-      for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W ~/ 2; x++) {
-          final l = small.getPixel(x,       y);
-          final r = small.getPixel(W-1-x, y);
-          lrDiff += ((l.r-r.r).abs() + (l.g-r.g).abs() + (l.b-r.b).abs());
+      double computeSim(bool horizontal) {
+        double totalDiff = 0;
+        const b = 4;
+        if (horizontal) {
+          for (int y = 0; y < H; y += b) {
+            for (int x = 0; x < W ~/ 2; x += b) {
+              double bL = 0, bR = 0;
+              for (int dy = 0; dy < b && y+dy < H; dy++) {
+                for (int dx = 0; dx < b && x+dx < W; dx++) {
+                  bL += img.getLuminance(small.getPixel(x+dx, y+dy));
+                  bR += img.getLuminance(small.getPixel(W-1-(x+dx), y+dy));
+                }
+              }
+              totalDiff += (bL - bR).abs();
+            }
+          }
+          return 1.0 - (totalDiff / ((W/2) * H * 255));
+        } else {
+          for (int y = 0; y < H ~/ 2; y += b) {
+            for (int x = 0; x < W; x += b) {
+              double bT = 0, bB = 0;
+              for (int dy = 0; dy < b && y+dy < H; dy++) {
+                for (int dx = 0; dx < b && x+dx < W; dx++) {
+                  bT += img.getLuminance(small.getPixel(x+dx, y+dy));
+                  bB += img.getLuminance(small.getPixel(x+dx, H-1-(y+dy)));
+                }
+              }
+              totalDiff += (bT - bB).abs();
+            }
+          }
+          return 1.0 - (totalDiff / (W * (H/2) * 255));
         }
       }
-      final lrSim = 1.0 - lrDiff / ((W/2) * H * 3 * 255);
 
-      // Top-bottom comparison
-      double tbDiff = 0;
-      for (int y = 0; y < H ~/ 2; y++) {
-        for (int x = 0; x < W; x++) {
-          final t = small.getPixel(x, y);
-          final b = small.getPixel(x, H-1-y);
-          tbDiff += ((t.r-b.r).abs() + (t.g-b.g).abs() + (t.b-b.b).abs());
-        }
-      }
-      final tbSim = 1.0 - tbDiff / (W * (H/2) * 3 * 255);
-
+      final lrSim = computeSim(true);
+      final tbSim = computeSim(false);
       final bestSim   = max(lrSim, tbSim);
       final direction = lrSim >= tbSim ? 'left-right' : 'top-bottom';
 
-      // KEY FIX: Rescale so that:
-      // ≤ 0.75 → score 0  (typical natural scene, not symmetric)
-      // 0.88  → score ~50 (partially symmetric)
-      // 0.94+ → score 100 (strong symmetry — reflections, arches)
-      final score = ((bestSim - 0.75) / 0.19 * 100).round().clamp(0, 100);
+      // Match Colab mapping: [0.65, 0.96] -> [0, 100]
+      final score = ((bestSim - 0.65) / 0.31 * 100).round().clamp(0, 100);
 
       String tip;
-      if (score >= 70) {
-        tip = 'Strong $direction symmetry — perfectly balanced composition.';
-      } else if (score >= 35) {
-        tip = 'Partial $direction symmetry. Centre your subject for stronger balance.';
-      } else {
-        tip = 'Low symmetry — try reflections, still water, or a centred arch.';
-      }
+      if (score >= 75) tip = 'Strong $direction symmetry — very balanced composition.';
+      else if (score >= 45) tip = 'Partial $direction symmetry. Centre your subject for stronger balance.';
+      else tip = 'Low symmetry. Try reflections, still water, or a centred arch.';
 
       return RuleResult(ruleName: 'Symmetry', score: score, tip: tip, detected: true);
     } catch (_) {
-      return const RuleResult(
-        ruleName: 'Symmetry', score: 20,
-        tip: 'Try reflections or centred subjects for symmetry.', detected: true,
-      );
+      return const RuleResult(ruleName: 'Symmetry', score: 20, tip: 'Try reflections or centred subjects.', detected: true);
     }
   }
 
@@ -438,7 +443,7 @@ class CompositionAnalyzer {
         );
       }
 
-      final stripW = (dlSize * 0.15).round();
+      final stripW = (dlSize * 0.18).round();
       final sides  = {
         'TOP'   : _mostCommonClass(seg, 0,          stripW,  cx1, cx2),
         'BOTTOM': _mostCommonClass(seg, dlSize-stripW, dlSize, cx1, cx2),
@@ -452,8 +457,8 @@ class CompositionAnalyzer {
           .map((e) => e.key).toList();
 
       final n     = framingSides.length;
-      // [0 sides=15, 1 side=35, 2 sides=60, 3 sides=80, 4 sides=98]
-      final score = n == 0 ? 15 : n == 1 ? 35 : n == 2 ? 60 : n == 3 ? 80 : 98;
+      // Colab Scoring: [0:0, 1:25, 2:55, 3:80, 4:98]
+      final score = n == 0 ? 0 : n == 1 ? 25 : n == 2 ? 55 : n == 3 ? 80 : 98;
 
       String tip;
       if (n >= 3) tip = 'Excellent! Subject framed on $n sides.';
@@ -496,127 +501,98 @@ class CompositionAnalyzer {
   // ══════════════════════════════════════════════════════════
   Future<RuleResult> _checkPerspective(img.Image image) async {
     if (_midasInterpreter == null) {
-      return const RuleResult(
-        ruleName: 'Perspective', score: 50,
-        tip: 'EYE LEVEL — try a low or high angle for more drama.', detected: true,
-      );
+      return const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — try a low or high angle for drama.', detected: true);
     }
     try {
       const mdSize = 256;
       final resized = img.copyResize(image, width: mdSize, height: mdSize);
 
-      // Preprocess input based on tensor type
-      final inputInfo = _midasInterpreter!.getInputTensor(0);
-      final isInt8    = inputInfo.type == TfLiteType.kTfLiteInt8;
-      final isUint8   = inputInfo.type == TfLiteType.kTfLiteUInt8;
-
-      Object input;
-      if (isInt8 || isUint8) {
-        input = List.generate(1, (_) => List.generate(
-          mdSize, (y) => List.generate(mdSize, (x) {
-            final p = resized.getPixel(x, y);
-            if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
-            return [(p.r.toInt() - 128), (p.g.toInt() - 128), (p.b.toInt() - 128)];
-          }),
-        ));
-      } else {
-        // MiDaS Small normalisation: scale to [−1, +1]
-        input = List.generate(1, (_) => List.generate(
-          mdSize, (y) => List.generate(mdSize, (x) {
-            final p = resized.getPixel(x, y);
-            return [p.r / 127.5 - 1.0, p.g / 127.5 - 1.0, p.b / 127.5 - 1.0];
-          }),
-        ));
+      final inputTensor = _midasInterpreter!.getInputTensor(0);
+      final isInt8      = inputTensor.type == TfLiteType.kTfLiteInt8;
+      
+      final inputData = isInt8 ? Int8List(1 * mdSize * mdSize * 3) : Float32List(1 * mdSize * mdSize * 3);
+      int pIdx = 0;
+      for (int y = 0; y < mdSize; y++) {
+        for (int x = 0; x < mdSize; x++) {
+          final p = resized.getPixel(x, y);
+          if (isInt8) {
+            inputData[pIdx++] = (p.r.toInt() - 128);
+            inputData[pIdx++] = (p.g.toInt() - 128);
+            inputData[pIdx++] = (p.b.toInt() - 128);
+          } else {
+            // Normalise to [-1, 1] per Colab
+            inputData[pIdx++] = p.r / 127.5 - 1.0;
+            inputData[pIdx++] = p.g / 127.5 - 1.0;
+            inputData[pIdx++] = p.b / 127.5 - 1.0;
+          }
+        }
       }
 
       final outShape = _midasInterpreter!.getOutputTensor(0).shape;
-      // Typical shape: [1, 256, 256] or [1, H, W]
-      final output   = List.generate(outShape[0], (_) => List.generate(
-        outShape[1], (_) => List.filled(outShape[2], 0.0),
-      ));
-      _midasInterpreter!.run(input, output);
+      final output   = [List.generate(outShape[1], (_) => List.filled(outShape[2], 0.0))];
+      _midasInterpreter!.run(inputData.buffer, output);
 
-      // Normalise depth to [0, 1]
       final flat   = output[0].expand((r) => r).toList();
       final dMin   = flat.reduce(min);
       final dMax   = flat.reduce(max);
       final dRange = (dMax - dMin).abs();
-      if (dRange < 1e-4) {
-        return const RuleResult(
-          ruleName: 'Perspective', score: 50,
-          tip: 'EYE LEVEL — uniform depth detected. Try a different angle.',
-          detected: true,
-        );
-      }
+      if (dRange < 1e-4) return const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — flat depth.', detected: true);
 
-      final depth = List.generate(mdSize, (y) => List.generate(
-        mdSize, (x) => (output[0][y][x] - dMin) / dRange,
-      ));
+      final depth = List.generate(mdSize, (y) => List.generate(mdSize, (x) => (output[0][y][x] - dMin) / dRange));
 
-      // Divide into 5 vertical bands and compute means
-      final band = mdSize ~/ 5;
-      final means = List.generate(5, (i) {
+      // 5-zone analysis from Colab
+      final z = mdSize ~/ 5;
+      final zones = List.generate(5, (i) {
         double s = 0; int n = 0;
-        for (int y = i*band; y < (i+1)*band && y < mdSize; y++) {
+        for (int y = i*z; y < (i+1)*z; y++) {
           for (int x = 0; x < mdSize; x++) { s += depth[y][x]; n++; }
         }
-        return n > 0 ? s / n : 0.5;
+        return s / n;
       });
 
-      final topMean = (means[0] + means[1]) / 2;  // upper 2 bands
-      final botMean = (means[3] + means[4]) / 2;  // lower 2 bands
-      final vDiff   = botMean - topMean;           // positive = low angle
+      final topMean    = (zones[0] + zones[1]) / 2;
+      final bottomMean = (zones[3] + zones[4]) / 2;
+      final overall    = flat.map((v) => (v - dMin) / dRange).reduce((a, b) => a + b) / (mdSize * mdSize);
+      final variance   = flat.map((v) => pow((v - dMin) / dRange - overall, 2)).reduce((a, b) => a + b) / (mdSize * mdSize);
+      final vertDiff   = bottomMean - topMean;
+      final vertRatio  = vertDiff / overall;
 
-      // Sky detection: blue-dominant pixels in top 1/4
-      int skyP = 0;
-      const skyH = mdSize ~/ 4;
-      for (int y = 0; y < skyH; y++) {
+      // Sky detection (Colab)
+      int skyCount = 0;
+      for (int y = 0; y < mdSize ~/ 3; y++) {
         for (int x = 0; x < mdSize; x++) {
           final p = resized.getPixel(x, y);
-          if (p.b.toInt() > p.r.toInt() + 15 &&
-              p.b.toInt() > p.g.toInt() &&
-              p.b.toInt() > 85) skyP++;
+          if (p.b > p.r + 15 && p.b > p.g && p.b > 90) skyCount++;
         }
       }
-      final skyRatio = skyP / (skyH * mdSize);
+      final skyRatio = skyCount / (mdSize * mdSize / 3);
+      final isOverhead = (skyRatio < 0.05 && variance < 0.04 && vertDiff.abs() < 0.25);
 
       String label;
       int    score;
+      String tip;
 
-      // Calibrated thresholds for better sensitivity
-      if (vDiff > 0.12 && (skyRatio > 0.06 || vDiff > 0.25)) {
-        label = 'LOW ANGLE';
-        score = min(100, (60 + (vDiff - 0.12) / 0.25 * 40).round());
-      } else if (vDiff > 0.05) {
-        label = 'SLIGHT LOW ANGLE';
-        score = min(90, (50 + (vDiff / 0.12) * 40).round());
-      } else if (vDiff < -0.12) {
+      if (isOverhead) {
         label = 'HIGH ANGLE';
-        score = min(100, (60 + ((-vDiff) - 0.12) / 0.25 * 40).round());
-      } else if (vDiff < -0.05) {
-        label = 'SLIGHT HIGH ANGLE';
-        score = min(90, (50 + ((-vDiff) / 0.12) * 40).round());
+        score = 75;
+        tip   = 'Camera pointing straight down — overhead shot.';
+      } else if (vertRatio > 0.28 && vertDiff > 0.07 && (skyRatio > 0.04 || zones[4] > zones[0])) {
+        label = 'LOW ANGLE';
+        score = (min(vertRatio / 0.55, 1.0) * 100).round();
+        tip   = 'Excellent! Low angles create drama and dominance.';
+      } else if (vertRatio < -0.28 && vertDiff.abs() > 0.07) {
+        label = 'HIGH ANGLE';
+        score = (min(vertRatio.abs() / 0.55, 1.0) * 100).round();
+        tip   = 'High angle works well for birds-eye shots.';
       } else {
         label = 'EYE LEVEL';
-        score = 50; 
+        score = (min(variance / 0.04, 1.0) * 45).round();
+        tip   = 'Standard eye-level shot. Try crouching or raising the camera.';
       }
 
-      final tip =
-          label == 'LOW ANGLE'        ? 'LOW ANGLE — dramatic, powerful shot. Well done.' :
-          label == 'SLIGHT LOW ANGLE' ? 'SLIGHT LOW ANGLE — go even lower for more impact.' :
-          label == 'HIGH ANGLE'       ? 'HIGH ANGLE — commanding overhead perspective.' :
-          label == 'SLIGHT HIGH ANGLE'? 'SLIGHT HIGH ANGLE — try going fully overhead.' :
-          'EYE LEVEL — try a low or high angle for more dynamic feel.';
-
-      return RuleResult(
-        ruleName: 'Perspective', score: score.clamp(0, 100),
-        tip: tip, detected: true,
-      );
+      return RuleResult(ruleName: 'Perspective', score: score.clamp(0, 100), tip: tip, detected: true);
     } catch (_) {
-      return const RuleResult(
-        ruleName: 'Perspective', score: 50,
-        tip: 'EYE LEVEL — try a low or high angle for more drama.', detected: true,
-      );
+      return const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — neutrally balanced.', detected: true);
     }
   }
 
