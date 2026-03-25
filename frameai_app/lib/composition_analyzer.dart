@@ -76,6 +76,13 @@ class CompositionAnalyzer {
     }
   }
 
+  void dispose() {
+    _yolo.dispose();
+    _deeplabInterpreter?.close();
+    _midasInterpreter?.close();
+    _nimaInterpreter?.close();
+  }
+
   Future<CompositionResult> analyseImage(List<int> imageBytes) async {
     final image = img.decodeImage(Uint8List.fromList(imageBytes));
     if (image == null) return _errorResult('Could not decode image');
