@@ -150,7 +150,8 @@ class _FeedbackEngine {
 
     if (issues.isEmpty) {
       final goodNames = good.map((r) => r.ruleName.toLowerCase()).toList();
-      return '\${getPraise()} \${goodNames.take(2).join(' and ')} are working well. \$nimaStr';
+      final goodJoined = goodNames.take(2).join(' and ');
+      return '${getPraise()} $goodJoined are working well. $nimaStr';
     }
 
     final primary = issues.first;
