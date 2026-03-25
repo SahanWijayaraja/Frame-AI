@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
 import 'yolo_detector.dart';
@@ -80,61 +81,88 @@ class CompositionAnalyzer {
     final image = img.decodeImage(Uint8List.fromList(imageBytes));
     if (image == null) return _errorResult('Could not decode image');
 
-    // Run YOLO detection once; reuse result for rules 1 and 3
+    // 1. Run YOLO detection first
     final detections = await _yolo.detect(image);
-    final subject    = _yolo.getPrimarySubject(detections);
+    DetectedObject? subject = _yolo.getPrimarySubject(detections);
+    bool isDepthFallback = false;
 
-    // Run all 6 rules and NIMA in parallel where possible
-    final r1Future = Future.value(_checkRuleOfThirds(subject));
-    final r2Future = Future.value(_checkLeadingLines(image));
-    final r3Future = Future.value(_checkNegativeSpace(subject));
-    final r4Future = Future.value(_checkSymmetry(image));
-    final r5Future = _checkFraming(image, subject);
-    final r6Future = _checkPerspective(image);
-    final nimaFuture = _getNimaScore(image);
+    // 2. Run Perspective/Depth analysis (reusable for fallback)
+    final perspectiveData = await _checkPerspective(image);
+    final r6 = perspectiveData.result;
+    final depthMap = perspectiveData.depth;
 
-    final results = await Future.wait([
-      r1Future, r2Future, r3Future, r4Future, r5Future, r6Future,
-    ]);
-    final nimaScore = await nimaFuture;
-
-    final r1 = results[0]; final r2 = results[1]; final r3 = results[2];
-    final r4 = results[3]; final r5 = results[4]; final r6 = results[5];
-
-    // Overall = mean of detected rules only (don't punish for N/A)
-    final active = [r1,r2,r3,r4,r5,r6].where((r) => r.detected && r.score >= 0).toList();
-    final overall = active.isEmpty
-        ? 50
-        : (active.map((r) => r.score).reduce((a,b) => a+b) / active.length).round();
-
-    // Best tip = from weakest detected rule
-    final weakest = active.isEmpty ? null
-        : active.reduce((a, b) => a.score < b.score ? a : b);
-
-    if (subject == null) {
-      return CompositionResult(
-        ruleOfThirds: r1, leadingLines: r2, negativeSpace: r3,
-        symmetry: r4, framing: r5, perspective: r6,
-        overallScore: overall.clamp(0, 100),
-        nimaScore:    nimaScore,
-        bestTip:      weakest?.tip ?? 'No subject detected. Move closer or center a subject.',
-        angleLabel:   r6.tip.contains('LOW') ? 'LOW ANGLE' : r6.tip.contains('HIGH') ? 'HIGH ANGLE' : 'EYE LEVEL',
-        professionalSuggestion: 'Look for leading lines or symmetry! To get subject tips, ensure a clear person or object is in focus.',
-      );
+    // 3. If YOLO failed, try Depth-Based subject detection
+    if (subject == null && depthMap != null) {
+      subject = _getSubjectFromDepth(depthMap);
+      if (subject != null) isDepthFallback = true;
     }
 
-    final suggestion = _suggestion(r1, r2, r3, r4, r5, r6, nimaScore);
-    final angle = r6.tip.contains('LOW') ? 'LOW ANGLE' :
-                  r6.tip.contains('HIGH') ? 'HIGH ANGLE' : 'EYE LEVEL';
+    // 4. Run remaining rules
+    final r1 = _checkRuleOfThirds(subject);
+    final r2 = _checkLeadingLines(image);
+    final r3 = _checkNegativeSpace(subject);
+    final r4 = _checkSymmetry(image);
+    final r5 = await _checkFraming(image, subject);
+    final nimaScore = await _getNimaScore(image);
+
+    final active = [r1, r2, r3, r4, r5, r6].where((r) => r.detected && r.score >= 0).toList();
+    final overall = active.isEmpty ? 50 : (active.map((r) => r.score).reduce((a, b) => a + b) / active.length).round();
+    final weakest = active.isEmpty ? null : active.reduce((a, b) => a.score < b.score ? a : b);
+
+    final angle = r6.tip.contains('LOW') ? 'LOW ANGLE' : r6.tip.contains('HIGH') ? 'HIGH ANGLE' : 'EYE LEVEL';
+    String suggestion = _suggestion(r1, r2, r3, r4, r5, r6, nimaScore);
+    
+    if (isDepthFallback) {
+      suggestion = 'Composition tips based on nearest object. $suggestion';
+    } else if (subject == null) {
+      suggestion = 'Look for leading lines or symmetry! To get subject tips, ensure a clear person or object is in focus.';
+    }
 
     return CompositionResult(
       ruleOfThirds: r1, leadingLines: r2, negativeSpace: r3,
       symmetry: r4, framing: r5, perspective: r6,
       overallScore: overall.clamp(0, 100),
-      nimaScore:    nimaScore,
-      bestTip:      weakest?.tip ?? 'Frame your shot and tap ANALYSE.',
-      angleLabel:   angle,
+      nimaScore: nimaScore,
+      bestTip: weakest?.tip ?? 'Frame your shot and tap ANALYSE.',
+      angleLabel: angle,
       professionalSuggestion: suggestion,
+    );
+  }
+
+  /// Extracts the closest prominent object from the depth map as a fallback subject
+  DetectedObject? _getSubjectFromDepth(List<List<double>> depth) {
+    int H = depth.length;
+    int W = depth[0].length;
+    
+    // Find max depth (closest point)
+    double maxD = 0;
+    for (var row in depth) { for (var v in row) { if (v > maxD) maxD = v; } }
+    if (maxD < 0.2) return null; // too flat
+
+    // Threshold: keep pixels in top 15% of depth range
+    double threshold = maxD * 0.85;
+    int minX = W, minY = H, maxX = 0, maxY = 0, count = 0;
+    
+    for (int y = 0; y < H; y++) {
+      for (int x = 0; x < W; x++) {
+        if (depth[y][x] >= threshold) {
+          if (x < minX) minX = x; if (y < minY) minY = y;
+          if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+          count++;
+        }
+      }
+    }
+
+    // Must be a significant cluster (>1% of image)
+    if (count < (W * H * 0.01)) return null;
+
+    return DetectedObject(
+      className: 'closest object',
+      confidence: 0.8,
+      x: minX / W,
+      y: minY / H,
+      width: (maxX - minX) / W,
+      height: (maxY - minY) / H,
     );
   }
 
@@ -501,9 +529,12 @@ class CompositionAnalyzer {
   // HIGH ANGLE (camera tilted down): top close → topMean > botMean
   // Score reflects intentionality of the perspective choice.
   // ══════════════════════════════════════════════════════════
-  Future<RuleResult> _checkPerspective(img.Image image) async {
+  Future<({RuleResult result, List<List<double>>? depth})> _checkPerspective(img.Image image) async {
     if (_midasInterpreter == null) {
-      return const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — try a low or high angle for drama.', detected: true);
+      return (
+        result: const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — try a low or high angle for drama.', detected: true),
+        depth: null
+      );
     }
     try {
       const mdSize = 256;
@@ -539,7 +570,10 @@ class CompositionAnalyzer {
       final dMin   = flat.reduce(min);
       final dMax   = flat.reduce(max);
       final dRange = (dMax - dMin).abs();
-      if (dRange < 1e-4) return const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — flat depth.', detected: true);
+      if (dRange < 1e-4) return (
+        result: const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — flat depth.', detected: true),
+        depth: null
+      );
 
       final depth = List.generate(mdSize, (y) => List.generate(mdSize, (x) => (output[0][y][x] - dMin) / dRange));
 
@@ -593,9 +627,15 @@ class CompositionAnalyzer {
         tip   = 'Standard eye-level shot. Try crouching or raising the camera.';
       }
 
-      return RuleResult(ruleName: 'Perspective', score: score.clamp(0, 100), tip: tip, detected: true);
+      return (
+        result: RuleResult(ruleName: 'Perspective', score: score.clamp(0, 100), tip: tip, detected: true),
+        depth: depth
+      );
     } catch (_) {
-      return const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — neutrally balanced.', detected: true);
+      return (
+        result: const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — neutrally balanced.', detected: true),
+        depth: null
+      );
     }
   }
 
