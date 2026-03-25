@@ -173,68 +173,6 @@ class CompositionAnalyzer {
     return RuleResult(ruleName: 'Rule of Thirds', score: score, tip: tip, detected: true);
   }
 
-  // ── Edge Detection for Glow Effect ───────────────────────
-  Future<Uint8List> getEdgeMask(List<int> imageBytes) async {
-    if (_deeplabInterpreter == null) return Uint8List(0);
-    try {
-      final image = img.decodeImage(Uint8List.fromList(imageBytes));
-      if (image == null) return Uint8List(0);
-
-      const dlSize = 257;
-      final resized = img.copyResize(image, width: dlSize, height: dlSize);
-      
-      // 1. Run segmentation
-      final inputInfo = _deeplabInterpreter!.getInputTensor(0);
-      Object input = _preprocessDeeplab(resized, inputInfo);
-      final outShape = _deeplabInterpreter!.getOutputTensor(0).shape;
-      final output = List.generate(outShape[0], (_) => List.generate(outShape[1], (_) => 
-          List.generate(outShape[2], (_) => List.filled(outShape[3], 0.0))));
-      
-      _deeplabInterpreter!.run(input, output);
-
-      // 2. Extract Binary Mask (Subject vs Background)
-      final mask = img.Image(width: dlSize, height: dlSize);
-      for (int y = 0; y < dlSize; y++) {
-        for (int x = 0; x < dlSize; x++) {
-          final s = output[0][y][x];
-          int best = 0; double bv = s[0];
-          for (int c = 1; c < 21; c++) {
-            if (s[c] > bv) { bv = s[c]; best = c; }
-          }
-          // If not background, color it white
-          mask.setPixelRgb(x, y, best != 0 ? 255 : 0, best != 0 ? 255 : 0, best != 0 ? 255 : 0);
-        }
-      }
-
-      // 3. Find Edges (Manual Sobel on Mask)
-      final edges = img.sobel(mask);
-      
-      // 4. Upscale back to original or fixed size for UI
-      return Uint8List.fromList(img.encodePng(edges));
-    } catch (_) {
-      return Uint8List(0);
-    }
-  }
-
-  Object _preprocessDeeplab(img.Image resized, Tensor inputInfo) {
-    final dlSize = resized.width;
-    final isInt8    = inputInfo.type == TfLiteType.kTfLiteInt8;
-    final isUint8   = inputInfo.type == TfLiteType.kTfLiteUInt8;
-
-    if (isInt8 || isUint8) {
-      return List.generate(1, (_) => List.generate(dlSize, (y) => List.generate(dlSize, (x) {
-        final p = resized.getPixel(x, y);
-        if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
-        return [p.r.toInt() - 128, p.g.toInt() - 128, p.b.toInt() - 128];
-      })));
-    } else {
-      return List.generate(1, (_) => List.generate(dlSize, (y) => List.generate(dlSize, (x) {
-        final p = resized.getPixel(x, y);
-        return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-      })));
-    }
-  }
-
   // ══════════════════════════════════════════════════════════
   // RULE 2 — Leading Lines (Sobel gradient convergence)
   // Score 100 = strong directional lines converging toward centre

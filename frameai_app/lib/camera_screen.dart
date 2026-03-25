@@ -8,7 +8,6 @@ import 'composition_analyzer.dart';
 import 'score_box_widget.dart';
 import 'camera_overlay_painter.dart';
 import 'yolo_detector.dart';
-import 'glow_edge_painter.dart';
 import 'main.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -19,7 +18,7 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen>
-    with WidgetsBindingObserver, TickerProviderStateMixin {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
 
   CameraController?  _controller;
   bool _isInitialised = false;
@@ -29,7 +28,6 @@ class _CameraScreenState extends State<CameraScreen>
   
   // Freeze frame state
   ui.Image? _frozenFrame;
-  ui.Image? _edgeMaskImage;
 
   FlashMode _flashMode = FlashMode.off;   // Flash OFF by default
   CompositionResult? _result;
@@ -39,7 +37,6 @@ class _CameraScreenState extends State<CameraScreen>
 
   final CompositionAnalyzer _analyzer = CompositionAnalyzer();
   late AnimationController  _gridAnim;
-  late AnimationController  _pulseAnim;
 
   @override
   void initState() {
@@ -50,10 +47,6 @@ class _CameraScreenState extends State<CameraScreen>
       vsync: this, duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
 
-    _pulseAnim = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-
     _initCamera();
     _analyzer.loadModels();
   }
@@ -62,7 +55,6 @@ class _CameraScreenState extends State<CameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _gridAnim.dispose();
-    _pulseAnim.dispose();
     _controller?.dispose();
     _analyzer.dispose();
     super.dispose();
@@ -203,14 +195,6 @@ class _CameraScreenState extends State<CameraScreen>
 
       final result = await _analyzer.analyseImage(bytes.toList());
       
-      // 5. Get Edge Mask for Glow (DeepLabV3)
-      final edgeMaskBytes = await _analyzer.getEdgeMask(bytes.toList());
-      if (edgeMaskBytes.isNotEmpty) {
-        final edgeCodec = await ui.instantiateImageCodec(edgeMaskBytes);
-        final edgeFrame = await edgeCodec.getNextFrame();
-        if (mounted) setState(() => _edgeMaskImage = edgeFrame.image);
-      }
-
       if (mounted) {
         setState(() {
           _isAnalysing = false;
@@ -229,7 +213,6 @@ class _CameraScreenState extends State<CameraScreen>
       _result        = null; 
       _liveSubject   = null; 
       _frozenFrame   = null;
-      _edgeMaskImage = null;
     });
   }
 
@@ -385,20 +368,6 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ),
-
-          // Glowing Edge Mask (only during freeze)
-          if (_edgeMaskImage != null)
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _pulseAnim,
-                builder: (_, __) => CustomPaint(
-                  painter: GlowEdgePainter(
-                    edgeMask: _edgeMaskImage!,
-                    pulseAnim: _pulseAnim.value,
-                  ),
-                ),
-              ),
-            ),
 
           if (_isAnalysing)
             Container(
