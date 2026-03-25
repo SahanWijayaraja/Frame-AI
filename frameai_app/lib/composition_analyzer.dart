@@ -124,11 +124,7 @@ class CompositionAnalyzer {
     );
   }
 
-  // ══════════════════════════════════════════════════════════
-  // RULE 1 — Rule of Thirds (YOLOv8n)
-  // Score 100 = subject centre is exactly on a third intersection
-  // Score 0   = subject centre is at the frame centre (worst case)
-  // ══════════════════════════════════════════════════════════
+  // ── RULE 1 — Rule of Thirds (YOLOv8n) ───────────────────
   RuleResult _checkRuleOfThirds(DetectedObject? subject) {
     if (subject == null) {
       return const RuleResult(
@@ -151,24 +147,92 @@ class CompositionAnalyzer {
       if (d < minDist) { minDist = d; nearest = pt; }
     }
 
-    // Max possible distance from any intersection is ~0.47 (at corners)
-    // At distance 0 → score 100; at distance 0.47 → score 0
     final score = (max(0.0, 1.0 - minDist / 0.47) * 100).round().clamp(0, 100);
 
     String tip;
-    if (score >= 75) {
-      tip = 'Great placement at a power point.';
+    if (score >= 82) {
+      tip = 'Perfect power-point alignment.';
     } else {
-      final hDir = subject.centerX > nearest[0] + 0.05 ? 'left'  :
-                   subject.centerX < nearest[0] - 0.05 ? 'right' : '';
-      final vDir = subject.centerY > nearest[1] + 0.05 ? 'up'    :
-                   subject.centerY < nearest[1] - 0.05 ? 'down'  : '';
-      final dirs = [hDir, vDir].where((d) => d.isNotEmpty).join(' & ');
-      tip = dirs.isNotEmpty
-          ? 'Move $dirs to hit a thirds power point.'
-          : 'Slightly adjust subject position.';
+      // SMARTER FEEDBACK: Tell them direction
+      final dx = subject.centerX - nearest[0];
+      final dy = subject.centerY - nearest[1];
+      
+      String hTip = dx > 0.05 ? 'left' : dx < -0.05 ? 'right' : '';
+      String vTip = dy > 0.05 ? 'up' : dy < -0.05 ? 'down' : '';
+      
+      if (hTip.isNotEmpty && vTip.isNotEmpty) {
+        tip = 'Shift slightly $hTip & $vTip';
+      } else if (hTip.isNotEmpty) {
+        tip = 'Move subject $hTip';
+      } else if (vTip.isNotEmpty) {
+        tip = 'Move subject $vTip';
+      } else {
+        tip = 'Align subject with grid intersections';
+      }
     }
     return RuleResult(ruleName: 'Rule of Thirds', score: score, tip: tip, detected: true);
+  }
+
+  // ── Edge Detection for Glow Effect ───────────────────────
+  Future<Uint8List> getEdgeMask(List<int> imageBytes) async {
+    if (_deeplabInterpreter == null) return Uint8List(0);
+    try {
+      final image = img.decodeImage(Uint8List.fromList(imageBytes));
+      if (image == null) return Uint8List(0);
+
+      const dlSize = 257;
+      final resized = img.copyResize(image, width: dlSize, height: dlSize);
+      
+      // 1. Run segmentation
+      final inputInfo = _deeplabInterpreter!.getInputTensor(0);
+      Object input = _preprocessDeeplab(resized, inputInfo);
+      final outShape = _deeplabInterpreter!.getOutputTensor(0).shape;
+      final output = List.generate(outShape[0], (_) => List.generate(outShape[1], (_) => 
+          List.generate(outShape[2], (_) => List.filled(outShape[3], 0.0))));
+      
+      _deeplabInterpreter!.run(input, output);
+
+      // 2. Extract Binary Mask (Subject vs Background)
+      final mask = img.Image(width: dlSize, height: dlSize);
+      for (int y = 0; y < dlSize; y++) {
+        for (int x = 0; x < dlSize; x++) {
+          final s = output[0][y][x];
+          int best = 0; double bv = s[0];
+          for (int c = 1; c < 21; c++) {
+            if (s[c] > bv) { bv = s[c]; best = c; }
+          }
+          // If not background, color it white
+          mask.setPixelRgb(x, y, best != 0 ? 255 : 0, best != 0 ? 255 : 0, best != 0 ? 255 : 0);
+        }
+      }
+
+      // 3. Find Edges (Manual Sobel on Mask)
+      final edges = img.sobel(mask);
+      
+      // 4. Upscale back to original or fixed size for UI
+      return Uint8List.fromList(img.encodePng(edges));
+    } catch (_) {
+      return Uint8List(0);
+    }
+  }
+
+  Object _preprocessDeeplab(img.Image resized, Tensor inputInfo) {
+    final dlSize = resized.width;
+    final isInt8    = inputInfo.type == TfLiteType.kTfLiteInt8;
+    final isUint8   = inputInfo.type == TfLiteType.kTfLiteUInt8;
+
+    if (isInt8 || isUint8) {
+      return List.generate(1, (_) => List.generate(dlSize, (y) => List.generate(dlSize, (x) {
+        final p = resized.getPixel(x, y);
+        if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
+        return [p.r.toInt() - 128, p.g.toInt() - 128, p.b.toInt() - 128];
+      })));
+    } else {
+      return List.generate(1, (_) => List.generate(dlSize, (y) => List.generate(dlSize, (x) {
+        final p = resized.getPixel(x, y);
+        return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
+      })));
+    }
   }
 
   // ══════════════════════════════════════════════════════════
@@ -252,25 +316,20 @@ class CompositionAnalyzer {
       );
     }
 
+    // CALIBRATION for 3:4
     final ratio = subject.area.clamp(0.0, 1.0);
     int    score;
     String tip;
 
-    if (ratio >= 0.10 && ratio <= 0.35) {
-      // Perfect! Peak at 22% centre of ideal
-      final deviation = (ratio - 0.225).abs() / 0.125;
-      score = (100 - deviation * 20).round().clamp(80, 100);
-      tip   = 'Great breathing room — subject fills ${(ratio*100).round()}% of frame.';
-    } else if (ratio < 0.10) {
-      score = (ratio / 0.10 * 70).round().clamp(0, 70);
-      tip   = 'Subject too small (${(ratio*100).round()}%). Move closer.';
-    } else if (ratio <= 0.55) {
-      final excess = (ratio - 0.35) / 0.20;
-      score = (80 - excess * 60).round().clamp(10, 80);
-      tip   = 'Slightly cramped (${(ratio*100).round()}%). Step back a little.';
+    if (ratio >= 0.08 && ratio <= 0.38) {
+      score = 95;
+      tip   = 'Ideal subject scale and breathing room.';
+    } else if (ratio < 0.08) {
+      score = (ratio / 0.08 * 80).round();
+      tip   = 'Subject too small. Zoom in or move closer.';
     } else {
-      score = max(0, ((1.0 - ratio) * 30).round());
-      tip   = 'Too tight — subject fills ${(ratio*100).round()}%. Step further back.';
+      score = ((1.0 - ratio) / 0.62 * 80).round();
+      tip   = 'Subject too large. Step back for more negative space.';
     }
 
     return RuleResult(ruleName: 'Negative Space', score: score.clamp(0,100), tip: tip, detected: true);
@@ -564,22 +623,22 @@ class CompositionAnalyzer {
       String label;
       int    score;
 
-      // Calibrated thresholds based on typical MiDaS depth maps:
-      if (vDiff > 0.20 && (skyRatio > 0.06 || vDiff > 0.30)) {
+      // Calibrated thresholds for better sensitivity
+      if (vDiff > 0.12 && (skyRatio > 0.06 || vDiff > 0.25)) {
         label = 'LOW ANGLE';
-        score = min(100, (50 + (vDiff - 0.20) / 0.30 * 50).round());
-      } else if (vDiff > 0.08) {
+        score = min(100, (60 + (vDiff - 0.12) / 0.25 * 40).round());
+      } else if (vDiff > 0.05) {
         label = 'SLIGHT LOW ANGLE';
-        score = min(90, (40 + (vDiff / 0.20) * 40).round());
-      } else if (vDiff < -0.20) {
+        score = min(90, (50 + (vDiff / 0.12) * 40).round());
+      } else if (vDiff < -0.12) {
         label = 'HIGH ANGLE';
-        score = min(100, (50 + ((-vDiff) - 0.20) / 0.30 * 50).round());
-      } else if (vDiff < -0.08) {
+        score = min(100, (60 + ((-vDiff) - 0.12) / 0.25 * 40).round());
+      } else if (vDiff < -0.05) {
         label = 'SLIGHT HIGH ANGLE';
-        score = min(90, (40 + ((-vDiff) / 0.20) * 40).round());
+        score = min(90, (50 + ((-vDiff) / 0.12) * 40).round());
       } else {
         label = 'EYE LEVEL';
-        score = 50; // valid choice — not penalised
+        score = 50; 
       }
 
       final tip =
@@ -648,25 +707,23 @@ class CompositionAnalyzer {
   // ══════════════════════════════════════════════════════════
   String _suggestion(RuleResult r1, RuleResult r2, RuleResult r3,
       RuleResult r4, RuleResult r5, RuleResult r6, double nima) {
-    final active = [r1,r2,r3,r4,r5,r6]
-        .where((r) => r.detected && r.score >= 0)
-        .toList()
-      ..sort((a, b) => a.score.compareTo(b.score));
-
+    final active = [r1, r2, r3, r4, r5, r6].where((r) => r.detected && r.score >= 0).toList();
     if (active.isEmpty) return 'Point at a clear subject and tap ANALYSE for feedback.';
 
-    final avgScore = active.map((r) => r.score).reduce((a,b) => a+b) / active.length;
+    final issues = active.where((r) => r.score < 70).toList()
+      ..sort((a, b) => a.score.compareTo(b.score));
+    final praises = active.where((r) => r.score >= 85).toList();
 
-    if (nima >= 65 && avgScore >= 65) {
-      return 'Excellent composition! Your image shows strong professional technique.';
-    }
-    if (nima >= 60 && avgScore >= 55) {
-      return 'Good shot! ${active.first.tip}';
+    if (issues.isEmpty) {
+      return 'Excellent! Professional-grade ${praises.isNotEmpty ? praises.first.ruleName.toLowerCase() : "composition"}.';
     }
 
-    // Two weakest rules as the suggestion
-    final tips = active.take(2).map((r) => r.tip).join(' Also: ');
-    return tips;
+    // Combine top 2 issues as advice
+    final mainAdvice = issues.first.tip;
+    if (issues.length > 1) {
+      return '$mainAdvice Also: ${issues[1].tip}';
+    }
+    return mainAdvice;
   }
 
   CompositionResult _errorResult(String msg) {

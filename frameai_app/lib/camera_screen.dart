@@ -1,4 +1,5 @@
-import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:gal/gal.dart';
@@ -7,6 +8,7 @@ import 'composition_analyzer.dart';
 import 'score_box_widget.dart';
 import 'camera_overlay_painter.dart';
 import 'yolo_detector.dart';
+import 'glow_edge_painter.dart';
 import 'main.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -17,13 +19,18 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
 
   CameraController?  _controller;
   bool _isInitialised = false;
   bool _isAnalysing   = false;
   bool _showResults   = false;
   bool _isSaving      = false;
+  
+  // Freeze frame state
+  ui.Image? _frozenFrame;
+  ui.Image? _edgeMaskImage;
+
   FlashMode _flashMode = FlashMode.off;   // Flash OFF by default
   CompositionResult? _result;
   DetectedObject?    _liveSubject;
@@ -32,14 +39,21 @@ class _CameraScreenState extends State<CameraScreen>
 
   final CompositionAnalyzer _analyzer = CompositionAnalyzer();
   late AnimationController  _gridAnim;
+  late AnimationController  _pulseAnim;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
     _gridAnim = AnimationController(
       vsync: this, duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+
+    _pulseAnim = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+
     _initCamera();
     _analyzer.loadModels();
   }
@@ -48,6 +62,7 @@ class _CameraScreenState extends State<CameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _gridAnim.dispose();
+    _pulseAnim.dispose();
     _controller?.dispose();
     _analyzer.dispose();
     super.dispose();
@@ -73,13 +88,13 @@ class _CameraScreenState extends State<CameraScreen>
       orElse: () => globalCameras.first,
     );
     final controller = CameraController(
-      camera, ResolutionPreset.high,
+      camera, 
+      ResolutionPreset.max, // 3:4 on most sensors
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
     try {
       await controller.initialize();
-      // Explicitly set flash OFF — no automatic flash ever
       await controller.setFlashMode(FlashMode.off);
       if (mounted) {
         setState(() {
@@ -104,13 +119,43 @@ class _CameraScreenState extends State<CameraScreen>
     } catch (_) {}
   }
 
-  // ── Shutter — save photo to gallery ──────────────────────
+  // ── Crop utility — ensure captured photo is exactly 3:4 ────────
+  Future<File> _cropTo3x4(String path) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      img.Image? image = img.decodeImage(bytes);
+      if (image == null) return File(path);
+
+      // Target aspect ratio 3:4 (width:height)
+      int targetW = image.width;
+      int targetH = (image.width * 4 / 3).round();
+
+      if (targetH > image.height) {
+        // Source is wider/shorter than 3:4 (e.g. 16:9 landscape)
+        targetH = image.height;
+        targetW = (image.height * 3 / 4).round();
+      }
+
+      final xOff = ((image.width - targetW) / 2).round();
+      final yOff = ((image.height - targetH) / 2).round();
+
+      final cropped = img.copyCrop(image, x: xOff, y: yOff, width: targetW, height: targetH);
+      final out = File(path);
+      await out.writeAsBytes(img.encodeJpg(cropped));
+      return out;
+    } catch (_) {
+      return File(path);
+    }
+  }
+
+  // ── Shutter — save cropped 3:4 photo to gallery ───────────
   Future<void> _shutter() async {
     if (_controller == null || !_controller!.value.isInitialized || _isSaving) return;
     setState(() => _isSaving = true);
     try {
       final file = await _controller!.takePicture();
-      await Gal.putImage(file.path);
+      final cropped = await _cropTo3x4(file.path);
+      await Gal.putImage(cropped.path);
       _showToast('Photo saved ✓');
     } catch (_) {
       _showToast('Could not save photo');
@@ -125,36 +170,67 @@ class _CameraScreenState extends State<CameraScreen>
     });
   }
 
-  // ── Analyse — capture + run AI ────────────────────────────
+  // ── Analyse — capture, freeze, crop, and run AI ────────────
   Future<void> _analyse() async {
     if (_isAnalysing || _controller == null || !_controller!.value.isInitialized) return;
-    setState(() { _isAnalysing = true; _showResults = false; _errorMessage = ''; });
+    setState(() { 
+      _isAnalysing = true; 
+      _showResults = false; 
+      _errorMessage = ''; 
+      _frozenFrame  = null;
+      _edgeMaskImage = null;
+    });
 
     try {
-      final file  = await _controller!.takePicture();
-      final bytes = await file.readAsBytes();
-      final image = img.decodeImage(bytes);
+      // 1. Capture still
+      final file = await _controller!.takePicture();
+      
+      // 2. Crop to 3:4
+      final cropped = await _cropTo3x4(file.path);
+      final bytes   = await cropped.readAsBytes();
 
+      // 3. Freeze UI
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      if (mounted) setState(() => _frozenFrame = frame.image);
+
+      // 4. Run Analysis
+      final image = img.decodeImage(bytes);
       if (image != null) {
         final dets = await _analyzer.yolo.detect(image);
         if (mounted) setState(() => _liveSubject = _analyzer.yolo.getPrimarySubject(dets));
       }
 
       final result = await _analyzer.analyseImage(bytes.toList());
+      
+      // 5. Get Edge Mask for Glow (DeepLabV3)
+      final edgeMaskBytes = await _analyzer.getEdgeMask(bytes.toList());
+      if (edgeMaskBytes.isNotEmpty) {
+        final edgeCodec = await ui.instantiateImageCodec(edgeMaskBytes);
+        final edgeFrame = await edgeCodec.getNextFrame();
+        if (mounted) setState(() => _edgeMaskImage = edgeFrame.image);
+      }
+
       if (mounted) {
         setState(() {
           _isAnalysing = false;
-          _showResults  = true;
-          _result       = result;
+          _showResults = true;
+          _result      = result;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() { _isAnalysing = false; _errorMessage = 'Analysis failed. Try again.'; });
+    } catch (e) {
+      if (mounted) setState(() { _isAnalysing = false; _errorMessage = 'Analysis failed: $e'; });
     }
   }
 
   void _closeResults() {
-    setState(() { _showResults = false; _result = null; _liveSubject = null; });
+    setState(() { 
+      _showResults   = false; 
+      _result        = null; 
+      _liveSubject   = null; 
+      _frozenFrame   = null;
+      _edgeMaskImage = null;
+    });
   }
 
   @override
@@ -249,6 +325,7 @@ class _CameraScreenState extends State<CameraScreen>
       final maxW = constraints.maxWidth;
       final maxH = constraints.maxHeight;
 
+      // Container for the 3:4 box
       double uiW, uiH;
       if (maxH / maxW >= 4 / 3) {
         uiW = maxW; uiH = maxW * 4 / 3;
@@ -256,18 +333,25 @@ class _CameraScreenState extends State<CameraScreen>
         uiH = maxH; uiW = maxH * 3 / 4;
       }
 
-      final sensorAt = _controller!.value.aspectRatio; 
-
       return Center(
         child: SizedBox(
           width:  uiW,
           height: uiH,
-          child: ClipRect(
-            child: OverflowBox(
-              alignment: Alignment.center,
-              child: AspectRatio(
-                aspectRatio: 1 / sensorAt,
-                child: CameraPreview(_controller!),
+          child: AspectRatio(
+            aspectRatio: 3 / 4,
+            child: ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.center,
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width:  _controller!.value.previewSize?.height ?? uiW,
+                    height: _controller!.value.previewSize?.width  ?? uiH,
+                    child: _frozenFrame != null 
+                        ? RawImage(image: _frozenFrame!, fit: BoxFit.cover)
+                        : CameraPreview(_controller!),
+                  ),
+                ),
               ),
             ),
           ),
@@ -287,6 +371,7 @@ class _CameraScreenState extends State<CameraScreen>
       return SizedBox(
         width: uiW, height: uiH,
         child: Stack(children: [
+          // Rule of thirds grid (always on, even during freeze)
           Positioned.fill(
             child: AnimatedBuilder(
               animation: _gridAnim,
@@ -300,6 +385,20 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ),
+
+          // Glowing Edge Mask (only during freeze)
+          if (_edgeMaskImage != null)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _pulseAnim,
+                builder: (_, __) => CustomPaint(
+                  painter: GlowEdgePainter(
+                    edgeMask: _edgeMaskImage!,
+                    pulseAnim: _pulseAnim.value,
+                  ),
+                ),
+              ),
+            ),
 
           if (_isAnalysing)
             Container(
