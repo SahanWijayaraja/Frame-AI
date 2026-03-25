@@ -69,7 +69,9 @@ class CompositionAnalyzer {
           'assets/models/midas_small.tflite', options: options);
       _nimaInterpreter    = await Interpreter.fromAsset(
           'assets/models/nima_mobilenet.tflite', options: options);
-    } catch (_) {
+      debugPrint('AI Models Loaded Successfully');
+    } catch (e) {
+      debugPrint('AI Model Load Failure: $e');
       // partial load — individual rules will fall back gracefully
     }
   }
@@ -113,11 +115,11 @@ class CompositionAnalyzer {
       return CompositionResult(
         ruleOfThirds: r1, leadingLines: r2, negativeSpace: r3,
         symmetry: r4, framing: r5, perspective: r6,
-        overallScore: 0,
+        overallScore: overall.clamp(0, 100),
         nimaScore:    nimaScore,
-        bestTip:      'No subject detected.',
-        angleLabel:   'EYE LEVEL',
-        professionalSuggestion: 'Point at a clear subject (person, animal, or object) and tap ANALYSE again. No subject detected.',
+        bestTip:      weakest?.tip ?? 'No subject detected. Move closer or center a subject.',
+        angleLabel:   r6.tip.contains('LOW') ? 'LOW ANGLE' : r6.tip.contains('HIGH') ? 'HIGH ANGLE' : 'EYE LEVEL',
+        professionalSuggestion: 'Look for leading lines or symmetry! To get subject tips, ensure a clear person or object is in focus.',
       );
     }
 
