@@ -75,19 +75,22 @@ class YoloDetector {
       final isUint8     = inputTensor.type == TfLiteType.kTfLiteUInt8;
 
       // Use typed lists for performance and reliability
-      final inputData = Uint8List(1 * inputSize * inputSize * 3);
+      final inputData = isInt8
+          ? Int8List(1 * inputSize * inputSize * 3)
+          : Uint8List(1 * inputSize * inputSize * 3);
+      final data = inputData as List;
       int pixelIdx = 0;
       for (int y = 0; y < inputSize; y++) {
         for (int x = 0; x < inputSize; x++) {
           final p = resized.getPixel(x, y);
           if (isInt8) {
-             inputData[pixelIdx++] = (p.r.toInt() - 128).toUnsigned(8);
-             inputData[pixelIdx++] = (p.g.toInt() - 128).toUnsigned(8);
-             inputData[pixelIdx++] = (p.b.toInt() - 128).toUnsigned(8);
+             data[pixelIdx++] = (p.r.toInt() - 128);
+             data[pixelIdx++] = (p.g.toInt() - 128);
+             data[pixelIdx++] = (p.b.toInt() - 128);
           } else {
-             inputData[pixelIdx++] = p.r.toInt();
-             inputData[pixelIdx++] = p.g.toInt();
-             inputData[pixelIdx++] = p.b.toInt();
+             data[pixelIdx++] = p.r.toInt();
+             data[pixelIdx++] = p.g.toInt();
+             data[pixelIdx++] = p.b.toInt();
           }
         }
       }
@@ -100,7 +103,7 @@ class YoloDetector {
       final numElements = outShape.reduce((a, b) => a * b);
       final outputData = isOutInt8 ? Int8List(numElements) : Float32List(numElements);
       
-      _interpreter!.run(inputData.buffer, outputData.buffer);
+      _interpreter!.run(inputData, outputData);
 
       // De-quantize if output is INT8
       List<double> scores;

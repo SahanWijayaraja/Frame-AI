@@ -531,7 +531,7 @@ class CompositionAnalyzer {
 
       final outShape = _midasInterpreter!.getOutputTensor(0).shape;
       final output   = [List.generate(outShape[1], (_) => List.filled(outShape[2], 0.0))];
-      _midasInterpreter!.run(inputData.buffer, output);
+      _midasInterpreter!.run(inputData, output);
 
       final flat   = output[0].expand((r) => r).toList();
       final dMin   = flat.reduce(min);
