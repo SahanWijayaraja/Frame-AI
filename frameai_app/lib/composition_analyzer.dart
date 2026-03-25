@@ -527,7 +527,9 @@ class CompositionAnalyzer {
       if (n >= 3) {
         tip = ["Excellent framing! Subject framed on \$n sides.", "Perfect natural frame.", "Beautifully framed by the environment."][_rng.nextInt(3)];
       } else if (n == 2) {
-        tip = 'Add a framing element on the \${['TOP','BOTTOM','LEFT','RIGHT'].firstWhere((s) => !framingSides.contains(s))} side.';
+        final allSides = ['TOP', 'BOTTOM', 'LEFT', 'RIGHT'];
+        final missingSide = allSides.firstWhere((s) => !framingSides.contains(s), orElse: () => 'opposite');
+        tip = 'Add a framing element on the $missingSide side.';
       } else if (n == 1) tip = 'Weak framing. Try shooting through a doorway or archway.';
       else tip = 'No framing detected. Look for windows, trees, or arches.';
 
