@@ -73,7 +73,6 @@ class CompositionAnalyzer {
       debugPrint('AI Models Loaded Successfully');
     } catch (e) {
       debugPrint('AI Model Load Failure: $e');
-      // partial load — individual rules will fall back gracefully
     }
   }
 
@@ -81,467 +80,351 @@ class CompositionAnalyzer {
     final image = img.decodeImage(Uint8List.fromList(imageBytes));
     if (image == null) return _errorResult('Could not decode image');
 
-    // 1. Run YOLO detection first
     final detections = await _yolo.detect(image);
-    DetectedObject? subject = _yolo.getPrimarySubject(detections);
-    bool isDepthFallback = false;
+    final subject = _yolo.getPrimarySubject(detections);
 
-    // 2. Run Perspective/Depth analysis (reusable for fallback)
-    final perspectiveData = await _checkPerspective(image);
-    final r6 = perspectiveData.result;
-    final depthMap = perspectiveData.depth;
+    final r1 = _ruleOfThirds(subject);
+    final r2 = _leadingLines(image);
+    final r3 = _negativeSpace(subject);
+    final r4 = _symmetry(image);
+    final r5 = await _framing(image, subject);
+    final r6Raw = await _perspective(image);
+    final nima = await _nimaScore(image);
 
-    // 3. If YOLO failed, try Depth-Based subject detection
-    if (subject == null && depthMap != null) {
-      subject = _getSubjectFromDepth(depthMap);
-      if (subject != null) isDepthFallback = true;
-    }
+    // Parse the angle label attached to the perspective tip
+    final pParts = r6Raw.tip.split('|');
+    final angleLabel = pParts.length > 1 ? pParts[0] : 'EYE LEVEL';
+    final pTip = pParts.length > 1 ? pParts[1] : r6Raw.tip;
+    final r6 = RuleResult(ruleName: r6Raw.ruleName, score: r6Raw.score, tip: pTip, detected: r6Raw.detected);
 
-    // 4. Run remaining rules
-    final r1 = _checkRuleOfThirds(subject);
-    final r2 = _checkLeadingLines(image);
-    final r3 = _checkNegativeSpace(subject);
-    final r4 = _checkSymmetry(image);
-    final r5 = await _checkFraming(image, subject);
-    final nimaScore = await _getNimaScore(image);
+    final overallScore = ((r1.score + r2.score + r3.score + r4.score + r5.score + r6.score) / 6).round().clamp(0, 100);
 
-    final active = [r1, r2, r3, r4, r5, r6].where((r) => r.detected && r.score >= 0).toList();
-    final overall = active.isEmpty ? 50 : (active.map((r) => r.score).reduce((a, b) => a + b) / active.length).round();
-    final weakest = active.isEmpty ? null : active.reduce((a, b) => a.score < b.score ? a : b);
-
-    final angle = r6.tip.contains('LOW') ? 'LOW ANGLE' : r6.tip.contains('HIGH') ? 'HIGH ANGLE' : 'EYE LEVEL';
-    String suggestion = _suggestion(r1, r2, r3, r4, r5, r6, nimaScore);
-    
-    if (isDepthFallback) {
-      suggestion = 'Composition tips based on nearest object. $suggestion';
-    } else if (subject == null) {
-      suggestion = 'Look for leading lines or symmetry! To get subject tips, ensure a clear person or object is in focus.';
-    }
+    final allRules = [r1, r2, r3, r4, r5, r6];
+    final weakest = allRules.reduce((a, b) => a.score < b.score ? a : b);
 
     return CompositionResult(
-      ruleOfThirds: r1, leadingLines: r2, negativeSpace: r3,
-      symmetry: r4, framing: r5, perspective: r6,
-      overallScore: overall.clamp(0, 100),
-      nimaScore: nimaScore,
-      bestTip: weakest?.tip ?? 'Frame your shot and tap ANALYSE.',
-      angleLabel: angle,
-      professionalSuggestion: suggestion,
+      ruleOfThirds: r1,
+      leadingLines: r2,
+      negativeSpace: r3,
+      symmetry: r4,
+      framing: r5,
+      perspective: r6,
+      overallScore: overallScore,
+      nimaScore: nima.score.toDouble(),
+      bestTip: weakest.tip,
+      angleLabel: angleLabel,
+      professionalSuggestion: nima.tip,
     );
   }
 
-  /// Extracts the closest prominent object from the depth map as a fallback subject
-  DetectedObject? _getSubjectFromDepth(List<List<double>> depth) {
-    int H = depth.length;
-    int W = depth[0].length;
-    
-    // Find max depth (closest point)
-    double maxD = 0;
-    for (var row in depth) { for (var v in row) { if (v > maxD) maxD = v; } }
-    if (maxD < 0.2) return null; // too flat
-
-    // Threshold: keep pixels in top 15% of depth range
-    double threshold = maxD * 0.85;
-    int minX = W, minY = H, maxX = 0, maxY = 0, count = 0;
-    
-    for (int y = 0; y < H; y++) {
-      for (int x = 0; x < W; x++) {
-        if (depth[y][x] >= threshold) {
-          if (x < minX) minX = x; if (y < minY) minY = y;
-          if (x > maxX) maxX = x; if (y > maxY) maxY = y;
-          count++;
-        }
-      }
-    }
-
-    // Must be a significant cluster (>1% of image)
-    if (count < (W * H * 0.01)) return null;
-
-    return DetectedObject(
-      className: 'closest object',
-      confidence: 0.8,
-      x: minX / W,
-      y: minY / H,
-      width: (maxX - minX) / W,
-      height: (maxY - minY) / H,
+  CompositionResult _errorResult(String msg) {
+    final err = RuleResult(ruleName: 'Error', score: 0, tip: msg, detected: false);
+    return CompositionResult(
+      ruleOfThirds: err, leadingLines: err, negativeSpace: err,
+      symmetry: err, framing: err, perspective: err,
+      overallScore: 0, nimaScore: 0, bestTip: msg, angleLabel: 'EYE LEVEL', professionalSuggestion: msg,
     );
   }
 
-  // ── RULE 1 — Rule of Thirds (YOLOv8n) ───────────────────
-  RuleResult _checkRuleOfThirds(DetectedObject? subject) {
+  // ── RULE 1 — Rule of Thirds  (YOLOv8n)
+  RuleResult _ruleOfThirds(DetectedObject? subject) {
     if (subject == null) {
       return const RuleResult(
-        ruleName: 'Rule of Thirds', score: -1,
-        tip: 'No subject detected. Point at a clear subject.', detected: false,
+        ruleName: 'Rule of Thirds',
+        score: 0,
+        tip: 'No subject detected — point at a clear subject.',
+        detected: false,
       );
     }
 
-    const intersections = [
-      [1/3.0, 1/3.0], [2/3.0, 1/3.0],
-      [1/3.0, 2/3.0], [2/3.0, 2/3.0],
+    final double cx = subject.x + subject.width / 2;
+    final double cy = subject.y + subject.height / 2;
+
+    final intersections = [
+      const Point(1 / 3, 1 / 3),
+      const Point(2 / 3, 1 / 3),
+      const Point(1 / 3, 2 / 3),
+      const Point(2 / 3, 2 / 3)
     ];
 
     double minDist = double.infinity;
-    List<double> nearest = intersections[0];
-    for (final pt in intersections) {
-      final dx = subject.centerX - pt[0];
-      final dy = subject.centerY - pt[1];
-      final d  = sqrt(dx*dx + dy*dy);
-      if (d < minDist) { minDist = d; nearest = pt; }
+    Point nearest = intersections[0];
+
+    for (var p in intersections) {
+      double dist = sqrt(pow(cx - p.x, 2) + pow(cy - p.y, 2));
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = p;
+      }
     }
 
-    final score = (max(0.0, 1.0 - minDist / 0.50) * 100).round().clamp(0, 100);
+    int score = max(0, ((1.0 - minDist / 0.50) * 100).toInt());
+
+    String hDir = cx > nearest.x + 0.05 ? "left" : (cx < nearest.x - 0.05 ? "right" : "");
+    String vDir = cy > nearest.y + 0.05 ? "down" : (cy < nearest.y - 0.05 ? "up" : "");
+    String direction = [hDir, vDir].where((s) => s.isNotEmpty).join(" and ");
 
     String tip;
-    if (score >= 82) {
-      tip = 'Perfect power-point alignment.';
+    if (score >= 80) {
+      tip = "Subject is at a strong third intersection. ";
+    } else if (direction.isNotEmpty) {
+      tip = "Move subject \$direction to hit a third intersection.";
     } else {
-      // dx > 0 = subject is RIGHT of target → move LEFT
-      // dy > 0 = subject is BELOW target → move UP
-      final dx = subject.centerX - nearest[0];
-      final dy = subject.centerY - nearest[1];
-
-      String hTip = dx > 0.05 ? 'left' : dx < -0.05 ? 'right' : '';
-      String vTip = dy > 0.05 ? 'up'   : dy < -0.05 ? 'down'  : '';
-
-      if (hTip.isNotEmpty && vTip.isNotEmpty) {
-        tip = 'Shift subject $hTip and $vTip';
-      } else if (hTip.isNotEmpty) {
-        tip = 'Shift subject $hTip';
-      } else if (vTip.isNotEmpty) {
-        tip = 'Shift subject $vTip';
-      } else {
-        tip = 'Align subject with a grid intersection';
-      }
+      tip = "Adjust framing slightly for Rule of Thirds.";
     }
-    return RuleResult(ruleName: 'Rule of Thirds', score: score, tip: tip, detected: true);
+
+    return RuleResult(ruleName: 'Rule of Thirds', score: score.clamp(0, 100), tip: tip, detected: true);
   }
 
-  // ══════════════════════════════════════════════════════════
-  // RULE 2 — Leading Lines (Sobel gradient convergence)
-  // Score 100 = strong directional lines converging toward centre
-  // Score 0   = no directional edges found
-  // NOTE: returned as "detected: true" always when edges exist,
-  //       so the user always gets feedback (just a lower score).
-  // ══════════════════════════════════════════════════════════
-  RuleResult _checkLeadingLines(img.Image image) {
-    try {
-      const size = 96;
-      final small = img.copyResize(image, width: size, height: size);
-      final gray  = img.grayscale(small);
+  // ── RULE 2 — Leading Lines  (Canny/Hough approximation)
+  RuleResult _leadingLines(img.Image image) {
+    final resized = img.copyResize(image, width: 128, height: 128);
+    int w = 128, h = 128;
+    int cx = w ~/ 2, cy = h ~/ 2;
+    int converging = 0;
+    int total = 0;
 
-      int converging = 0;
-      int total      = 0;
+    for (int y = 1; y < h - 1; y++) {
+      for (int x = 1; x < w - 1; x++) {
+        int p00 = resized.getPixel(x - 1, y - 1).r.toInt();
+        int p01 = resized.getPixel(x, y - 1).r.toInt();
+        int p02 = resized.getPixel(x + 1, y - 1).r.toInt();
+        int p20 = resized.getPixel(x - 1, y + 1).r.toInt();
+        int p21 = resized.getPixel(x, y + 1).r.toInt();
+        int p22 = resized.getPixel(x + 1, y + 1).r.toInt();
+        int p10 = resized.getPixel(x - 1, y).r.toInt();
+        int p12 = resized.getPixel(x + 1, y).r.toInt();
 
-      for (int y = 1; y < size - 1; y++) {
-        for (int x = 1; x < size - 1; x++) {
-          final tl = gray.getPixel(x-1, y-1).r.toInt();
-          final tc = gray.getPixel(x,   y-1).r.toInt();
-          final tr = gray.getPixel(x+1, y-1).r.toInt();
-          final ml = gray.getPixel(x-1, y  ).r.toInt();
-          final mr = gray.getPixel(x+1, y  ).r.toInt();
-          final bl = gray.getPixel(x-1, y+1).r.toInt();
-          final bc = gray.getPixel(x,   y+1).r.toInt();
-          final br = gray.getPixel(x+1, y+1).r.toInt();
+        int gx = (p02 + 2 * p12 + p22) - (p00 + 2 * p10 + p20);
+        int gy = (p20 + 2 * p21 + p22) - (p00 + 2 * p01 + p02);
+        double mag = sqrt(gx * gx + gy * gy);
 
-          final gx = (-tl - 2*ml - bl + tr + 2*mr + br).toDouble();
-          final gy = (-tl - 2*tc - tr + bl + 2*bc + br).toDouble();
-          final mag = sqrt(gx*gx + gy*gy);
-
-          if (mag < 25) continue; // ignore weak edges
+        if (mag > 80) { // Canny threshold approx
           total++;
+          double angle = atan2(gy, gx) + pi / 2;
+          double dx = cos(angle);
+          double dy = sin(angle);
+          double norm = sqrt(dx * dx + dy * dy) + 1e-6;
 
-          // Dot product with direction toward frame centre
-          final cx = (size / 2 - x).toDouble();
-          final cy = (size / 2 - y).toDouble();
-          if (gx * cx + gy * cy > 0) converging++;
+          double tcx = cx - x.toDouble();
+          double tcy = cy - y.toDouble();
+          double tNorm = sqrt(tcx * tcx + tcy * tcy) + 1e-6;
+
+          double dot = (dx * tcx + dy * tcy) / (norm * tNorm);
+          if (dot.abs() > 0.55) {
+            converging++;
+          }
         }
       }
-
-      if (total < 100) {
-        return const RuleResult(
-          ruleName: 'Leading Lines', score: 20,
-          tip: 'Very few edges detected. Look for roads, fences, or corridors.',
-          detected: true,   // always show rule — just low score
-        );
-      }
-
-      // Natural images: ~48–52% converge by chance.
-      // Anything >60% = real leading lines toward centre.
-      final ratio = converging / total;
-      // Match Colab mapping: [0.50 .. 0.82] → [0 .. 100]
-      final score = ((ratio - 0.50) / 0.32 * 100).round().clamp(0, 100);
-
-      String tip;
-      if (score >= 70) {
-        tip = 'Strong leading lines! They guide the viewer right to your subject.';
-      } else if (score >= 35) {
-        tip = 'Subtle leading lines. Align them to point more directly at your subject.';
-      } else {
-        tip = 'No strong leading lines. Use roads, fences, or shoreline to guide the eye.';
-      }
-
-      return RuleResult(ruleName: 'Leading Lines', score: score, tip: tip, detected: true);
-    } catch (_) {
-      return const RuleResult(
-        ruleName: 'Leading Lines', score: 30,
-        tip: 'Look for roads, fences, or corridors to guide the eye.', detected: true,
-      );
     }
+
+    if (total == 0) {
+      return const RuleResult(ruleName: 'Leading Lines', score: 0, tip: "No lines found.", detected: false);
+    }
+
+    double ratio = converging / total;
+    int score = min((ratio / 0.4) * 100, 100.0).toInt();
+
+    String tip;
+    if (score >= 75) {
+      tip = "\$converging strong leading lines guide the eye inward. Excellent!";
+    } else if (score >= 40) {
+      tip = "\$converging partial leading lines. Try including a road or path.";
+    } else {
+      tip = "Lines don't guide toward subject. Find a path, fence, or corridor.";
+    }
+
+    return RuleResult(ruleName: 'Leading Lines', score: score.clamp(0, 100), tip: tip, detected: true);
   }
 
-  // ══════════════════════════════════════════════════════════
-  // RULE 3 — Negative Space (YOLOv8n bbox area)
-  // Ideal: subject fills 10–35% of the frame
-  // ══════════════════════════════════════════════════════════
-  RuleResult _checkNegativeSpace(DetectedObject? subject) {
+  // ── RULE 3 — Negative Space  (YOLOv8n bbox area ratio)
+  RuleResult _negativeSpace(DetectedObject? subject) {
     if (subject == null) {
       return const RuleResult(
-        ruleName: 'Negative Space', score: -1,
-        tip: 'No subject detected to measure negative space.', detected: false,
+        ruleName: 'Negative Space',
+        score: 50,
+        tip: "No subject detected. Score is neutral.",
+        detected: false,
       );
     }
 
-    // CALIBRATION for 3:4
-    final ratio = subject.area.clamp(0.0, 1.0);
-    int    score;
+    double ratio = subject.width * subject.height; // area ratio
+    int score;
     String tip;
 
-    if (ratio < 0.05) {
-      score = (ratio / 0.05 * 40).round();
-      tip   = 'Subject too small. Move much closer.';
+    if (ratio >= 0.10 && ratio <= 0.35) {
+      score = (90 + (0.225 - (ratio - 0.225).abs()) / 0.225 * 10).toInt();
+      tip = "Subject fills \${(ratio * 100).toStringAsFixed(0)}% of frame — ideal negative space.";
     } else if (ratio < 0.10) {
-      score = (40 + (ratio - 0.05) / 0.05 * 50).round();
-      tip   = 'Subject slightly small. Move closer for better presence.';
-    } else if (ratio <= 0.35) {
-      score = 95;
-      tip   = 'Ideal — subject and negative space are perfectly balanced.';
+      score = (ratio / 0.10 * 60).toInt();
+      tip = "Subject too small (\${(ratio * 100).toStringAsFixed(0)}%). Move closer.";
     } else if (ratio <= 0.55) {
-      score = (95 - ((ratio - 0.35) / 0.20 * 45)).round();
-      tip   = 'Subject fills {ratio*100:.0f}% — slightly cramped. Step back a little.';
+      score = ((1 - (ratio - 0.35) / 0.20) * 70).toInt();
+      tip = "Subject fills \${(ratio * 100).toStringAsFixed(0)}% — slightly cramped. Step back a little.";
     } else {
-      score = (50 - ((ratio - 0.55) / 0.45 * 50)).round();
-      tip   = 'Subject fills {ratio*100:.0f}% — very tight. Step back for breathing room.';
+      score = max(0, ((1 - (ratio - 0.55) / 0.45) * 40).toInt());
+      tip = "Subject fills \${(ratio * 100).toStringAsFixed(0)}% — very tight. Step back for breathing room.";
     }
 
-    return RuleResult(ruleName: 'Negative Space', score: score.clamp(0,100), tip: tip, detected: true);
+    return RuleResult(ruleName: 'Negative Space', score: score.clamp(0, 100), tip: tip, detected: true);
   }
 
-  // ══════════════════════════════════════════════════════════
-  // RULE 4 — Symmetry (pixel comparison)
-  // FIXED: The previous threshold was far too low.
-  // Natural photos have ~55–70% pixel similarity by chance.
-  // True symmetric scenes (reflections, arch) reach 85–95%.
-  // Score = 0 below 70%, 100 at 92%+.
-  // ══════════════════════════════════════════════════════════
-  RuleResult _checkSymmetry(img.Image image) {
-    try {
-      final small = img.copyResize(image, width: 128, height: 128);
-      final W = small.width;
-      final H = small.height;
+  // ── RULE 4 — Symmetry  (SSIM approx via Pixel Diff)
+  RuleResult _symmetry(img.Image image) {
+    final resized = img.copyResize(image, width: 64, height: 64);
+    int H = 64, W = 64;
+    double mseLR = 0, mseTB = 0;
 
-      double computeSim(bool horizontal) {
-        double totalDiff = 0;
-        const b = 4;
-        if (horizontal) {
-          for (int y = 0; y < H; y += b) {
-            for (int x = 0; x < W ~/ 2; x += b) {
-              double bL = 0, bR = 0;
-              for (int dy = 0; dy < b && y+dy < H; dy++) {
-                for (int dx = 0; dx < b && x+dx < W; dx++) {
-                  bL += img.getLuminance(small.getPixel(x+dx, y+dy));
-                  bR += img.getLuminance(small.getPixel(W-1-(x+dx), y+dy));
-                }
-              }
-              totalDiff += (bL - bR).abs();
-            }
-          }
-          return 1.0 - (totalDiff / ((W/2) * H * 255));
-        } else {
-          for (int y = 0; y < H ~/ 2; y += b) {
-            for (int x = 0; x < W; x += b) {
-              double bT = 0, bB = 0;
-              for (int dy = 0; dy < b && y+dy < H; dy++) {
-                for (int dx = 0; dx < b && x+dx < W; dx++) {
-                  bT += img.getLuminance(small.getPixel(x+dx, y+dy));
-                  bB += img.getLuminance(small.getPixel(x+dx, H-1-(y+dy)));
-                }
-              }
-              totalDiff += (bT - bB).abs();
-            }
-          }
-          return 1.0 - (totalDiff / (W * (H/2) * 255));
-        }
+    for (int y = 0; y < H; y++) {
+      for (int x = 0; x < W; x++) {
+        double p = resized.getPixel(x, y).luminance / 255.0;
+        double pLR = resized.getPixel(W - 1 - x, y).luminance / 255.0;
+        double pTB = resized.getPixel(x, H - 1 - y).luminance / 255.0;
+        
+        // Exaggerate structural mismatch
+        mseLR += pow(p - pLR, 2);
+        mseTB += pow(p - pTB, 2);
       }
-
-      final lrSim = computeSim(true);
-      final tbSim = computeSim(false);
-      final bestSim   = max(lrSim, tbSim);
-      final direction = lrSim >= tbSim ? 'left-right' : 'top-bottom';
-
-      // Match Colab mapping: [0.65, 0.96] -> [0, 100]
-      final score = ((bestSim - 0.65) / 0.31 * 100).round().clamp(0, 100);
-
-      String tip;
-      if (score >= 75) tip = 'Strong $direction symmetry — very balanced composition.';
-      else if (score >= 45) tip = 'Partial $direction symmetry. Centre your subject for stronger balance.';
-      else tip = 'Low symmetry. Try reflections, still water, or a centred arch.';
-
-      return RuleResult(ruleName: 'Symmetry', score: score, tip: tip, detected: true);
-    } catch (_) {
-      return const RuleResult(ruleName: 'Symmetry', score: 20, tip: 'Try reflections or centred subjects.', detected: true);
     }
+    
+    // Normalise to 0-1 range (SSIM approximation)
+    double scoreLR = max(0.0, 1.0 - (mseLR / (W * H * 0.5)));
+    double scoreTB = max(0.0, 1.0 - (mseTB / (W * H * 0.5)));
+
+    double bestSsim = max(scoreLR, scoreTB);
+    String direction = scoreLR >= scoreTB ? "left-right" : "top-bottom";
+
+    int score = max(0, ((bestSsim - 0.30) / 0.65 * 100).toInt()).clamp(0, 100);
+    String tip;
+
+    if (score >= 75) {
+      tip = "Strong \$direction symmetry detected — very balanced composition.";
+    } else if (score >= 45) {
+      tip = "Partial \$direction symmetry. Centre your subject for stronger balance.";
+    } else {
+      tip = "No strong symmetry. For symmetry: centre subject, use reflections.";
+    }
+
+    return RuleResult(ruleName: 'Symmetry', score: score, tip: tip, detected: true);
   }
 
-  // ══════════════════════════════════════════════════════════
-  // RULE 5 — Framing (DeepLabV3)
-  // Checks if different semantic classes appear on the frame borders
-  // ══════════════════════════════════════════════════════════
-  Future<RuleResult> _checkFraming(img.Image image, DetectedObject? subject) async {
+  // ── RULE 5 — Framing  (DeepLabV3)
+  Future<RuleResult> _framing(img.Image image, DetectedObject? subject) async {
     if (_deeplabInterpreter == null) {
-      return const RuleResult(
-        ruleName: 'Framing', score: 20,
-        tip: 'Look for windows, arches, or branches to frame your subject.',
-        detected: true,
-      );
+      return const RuleResult(ruleName: 'Framing', score: 50, tip: 'Framing unavailable.', detected: false);
     }
+
     try {
-      const dlSize = 257;
+      const int dlSize = 257;
       final resized = img.copyResize(image, width: dlSize, height: dlSize);
-
-      // Preprocess input based on tensor type
-      final inputInfo = _deeplabInterpreter!.getInputTensor(0);
-      final isInt8    = inputInfo.type == TfLiteType.kTfLiteInt8;
-      final isUint8   = inputInfo.type == TfLiteType.kTfLiteUInt8;
-
-      Object input;
-      if (isInt8 || isUint8) {
-        input = List.generate(1, (_) => List.generate(
-          dlSize, (y) => List.generate(dlSize, (x) {
-            final p = resized.getPixel(x, y);
-            if (isUint8) return [p.r.toInt(), p.g.toInt(), p.b.toInt()];
-            return [p.r.toInt() - 128, p.g.toInt() - 128, p.b.toInt() - 128];
-          }),
-        ));
-      } else {
-        // Normalise to [0, 1]
-        input = List.generate(1, (_) => List.generate(
-          dlSize, (y) => List.generate(dlSize, (x) {
-            final p = resized.getPixel(x, y);
-            return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-          }),
-        ));
+      final inputData = Float32List(1 * dlSize * dlSize * 3);
+      final data = inputData as List;
+      int idx = 0;
+      for (int y = 0; y < dlSize; y++) {
+        for (int x = 0; x < dlSize; x++) {
+          final p = resized.getPixel(x, y);
+          data[idx++] = p.r / 255.0;
+          data[idx++] = p.g / 255.0;
+          data[idx++] = p.b / 255.0;
+        }
       }
 
       final outShape = _deeplabInterpreter!.getOutputTensor(0).shape;
-      // Expected: [1, 257, 257, 21]
-      final output   = List.generate(outShape[0], (_) => List.generate(
-        outShape[1], (_) => List.generate(outShape[2], (_) =>
-          List.filled(outShape[3], 0.0),
-        ),
-      ));
+      final output = [List.generate(outShape[1], (_) => List.generate(outShape[2], (_) => List.filled(outShape[3], 0.0)))];
+      _deeplabInterpreter!.run(inputData, output);
 
-      _deeplabInterpreter!.run(input, output);
-
-      // Argmax per pixel over 21 classes
-      final seg = List.generate(dlSize, (y) => List.generate(dlSize, (x) {
-        final s = output[0][y][x];
-        int best = 0; double bv = s[0];
-        for (int c = 1; c < s.length; c++) {
-          if (s[c] > bv) { bv = s[c]; best = c; }
+      final seg = List.generate(dlSize, (y) => List.filled(dlSize, 0));
+      for (int y = 0; y < dlSize; y++) {
+        for (int x = 0; x < dlSize; x++) {
+          int maxCls = 0; double maxVal = -1;
+          for (int c = 0; c < 21; c++) {
+            if (output[0][y][x][c] > maxVal) { maxVal = output[0][y][x][c]; maxCls = c; }
+          }
+          seg[y][x] = maxCls;
         }
-        return best;
-      }));
+      }
 
-      // Determine dominant class in the centre region
-      final cx1 = (dlSize * 0.25).round(); final cx2 = (dlSize * 0.75).round();
-      final cy1 = (dlSize * 0.20).round(); final cy2 = (dlSize * 0.80).round();
+      int H = dlSize, W = dlSize;
+      int cx1 = (W * 0.28).toInt(), cx2 = (W * 0.72).toInt();
+      int cy1 = (H * 0.22).toInt(), cy2 = (H * 0.78).toInt();
+
       final counts = List.filled(21, 0);
       for (int y = cy1; y < cy2; y++) {
-        for (int x = cx1; x < cx2; x++) counts[seg[y][x]]++;
+        for (int x = cx1; x < cx2; x++) {
+          counts[seg[y][x]]++;
+        }
       }
-      counts[0] = 0; // ignore background
-      int subjClass = 0, maxCnt = 0;
-      for (int c = 0; c < 21; c++) {
-        if (counts[c] > maxCnt) { maxCnt = counts[c]; subjClass = c; }
-      }
-
-      if (maxCnt < 100) {
-        return const RuleResult(
-          ruleName: 'Framing', score: 15,
-          tip: 'No clear subject centre detected. Try shooting through a frame.',
-          detected: true,
-        );
+      
+      if (counts.sublist(1).reduce((a, b) => a + b) > 0) counts[0] = 0;
+      int subjCls = 0; int maxCount = -1;
+      for (int i = 0; i < 21; i++) {
+        if (counts[i] > maxCount) { maxCount = counts[i]; subjCls = i; }
       }
 
-      final stripW = (dlSize * 0.18).round();
-      final sides  = {
-        'TOP'   : _mostCommonClass(seg, 0,          stripW,  cx1, cx2),
-        'BOTTOM': _mostCommonClass(seg, dlSize-stripW, dlSize, cx1, cx2),
-        'LEFT'  : _mostCommonClass(seg, cy1,          cy2,    0,   stripW),
-        'RIGHT' : _mostCommonClass(seg, cy1,          cy2,    dlSize-stripW, dlSize),
+      int strip = (H * 0.18).toInt();
+      final strips = {
+        "TOP": [0, strip, cx1, cx2],
+        "BOTTOM": [H - strip, H, cx1, cx2],
+        "LEFT": [cy1, cy2, 0, strip],
+        "RIGHT": [cy1, cy2, W - strip, W]
       };
 
-      // A side "frames" the subject if it has a DIFFERENT class than subject centre
-      final framingSides = sides.entries
-          .where((e) => e.value != subjClass && e.value != 0)
-          .map((e) => e.key).toList();
+      List<String> framingSides = [];
+      strips.forEach((side, bounds) {
+        final Map<int, int> regionCounts = {};
+        for (int y = bounds[0]; y < bounds[1]; y++) {
+          for (int x = bounds[2]; x < bounds[3]; x++) {
+            int c = seg[y][x];
+            regionCounts[c] = (regionCounts[c] ?? 0) + 1;
+          }
+        }
+        if (regionCounts.isNotEmpty) {
+          int dom = -1, maxC = -1;
+          regionCounts.forEach((cls, count) {
+            if (count > maxC) { maxC = count; dom = cls; }
+          });
+          if (dom != subjCls) framingSides.add(side);
+        }
+      });
 
-      final n     = framingSides.length;
-      // Colab Scoring: [0:0, 1:25, 2:55, 3:80, 4:98]
-      final score = n == 0 ? 0 : n == 1 ? 25 : n == 2 ? 55 : n == 3 ? 80 : 98;
-
+      int n = framingSides.length;
+      int score = {0: 0, 1: 25, 2: 55, 3: 80, 4: 98}[n] ?? 0;
       String tip;
-      if (n >= 3) tip = 'Excellent! Subject framed on $n sides.';
-      else if (n == 2) {
-        final missing = ['TOP','BOTTOM','LEFT','RIGHT']
-            .where((s) => !framingSides.contains(s)).toList();
-        tip = 'Add a framing element on the ${missing.first} side.';
-      } else if (n == 1) tip = 'Weak framing. Try shooting through a doorway or arch.';
-      else               tip = 'No framing detected. Look for windows, trees, or arches.';
+
+      if (n >= 3) {
+        tip = "Subject framed on \$n sides (\${framingSides.join(', ')}). Excellent!";
+      } else if (n == 2) {
+        final miss = ["TOP", "BOTTOM", "LEFT", "RIGHT"].firstWhere((s) => !framingSides.contains(s));
+        tip = "Partial framing. Add an element on the \$miss side.";
+      } else if (n == 1) {
+        tip = "Weak framing. Try shooting through a doorway or between trees.";
+      } else {
+        tip = "No framing. Look for windows, arches, or branches to frame subject.";
+      }
 
       return RuleResult(ruleName: 'Framing', score: score, tip: tip, detected: true);
     } catch (_) {
-      return const RuleResult(
-        ruleName: 'Framing', score: 20,
-        tip: 'Look for natural frames like arches, windows, or branches.',
-        detected: true,
-      );
+      return const RuleResult(ruleName: 'Framing', score: 50, tip: '', detected: false);
     }
   }
 
-  int _mostCommonClass(List<List<int>> seg, int y0, int y1, int x0, int x1) {
-    final c = List.filled(21, 0);
-    for (int y = y0; y < y1 && y < seg.length; y++) {
-      for (int x = x0; x < x1 && x < seg[0].length; x++) c[seg[y][x]]++;
-    }
-    int best = 0, bv = 0;
-    for (int i = 0; i < 21; i++) { if (c[i] > bv) { bv = c[i]; best = i; } }
-    return best;
-  }
-
-  // ══════════════════════════════════════════════════════════
-  // RULE 6 — Perspective & Angle (MiDaS depth map)
-  // Compare mean depth of top zones vs bottom zones.
-  // In MiDaS: HIGHER value = CLOSER to camera.
-  // EYE LEVEL: top/bottom means are roughly equal → score 50
-  // LOW ANGLE (camera tilted up): foreground=bottom is close (high depth),
-  //   sky=top is far (low depth) → botMean > topMean
-  // HIGH ANGLE (camera tilted down): top close → topMean > botMean
-  // Score reflects intentionality of the perspective choice.
-  // ══════════════════════════════════════════════════════════
-  Future<({RuleResult result, List<List<double>>? depth})> _checkPerspective(img.Image image) async {
+  // ── RULE 6 — Perspective / Angle  (MiDaS)
+  Future<RuleResult> _perspective(img.Image image) async {
     if (_midasInterpreter == null) {
-      return (
-        result: const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — try a low or high angle for drama.', detected: true),
-        depth: null
+      return const RuleResult(
+        ruleName: 'Perspective',
+        score: 50,
+        tip: 'EYE LEVEL|Eye level — neutrally balanced.',
+        detected: false,
       );
     }
-    try {
-      const mdSize = 256;
-      final resized = img.copyResize(image, width: mdSize, height: mdSize);
 
+    try {
+      const int mdSize = 256;
+      final resized = img.copyResize(image, width: mdSize, height: mdSize);
+      
       final inputTensor = _midasInterpreter!.getInputTensor(0);
-      final isInt8      = inputTensor.type == TfLiteType.kTfLiteInt8;
+      final isInt8 = inputTensor.type == TfLiteType.kTfLiteInt8;
       
       final inputData = isInt8 ? Int8List(1 * mdSize * mdSize * 3) : Float32List(1 * mdSize * mdSize * 3);
       final data = inputData as List;
@@ -554,7 +437,6 @@ class CompositionAnalyzer {
             data[pIdx++] = (p.g.toInt() - 128);
             data[pIdx++] = (p.b.toInt() - 128);
           } else {
-            // Normalise to [-1, 1] per Colab
             data[pIdx++] = p.r / 127.5 - 1.0;
             data[pIdx++] = p.g / 127.5 - 1.0;
             data[pIdx++] = p.b / 127.5 - 1.0;
@@ -563,191 +445,122 @@ class CompositionAnalyzer {
       }
 
       final outShape = _midasInterpreter!.getOutputTensor(0).shape;
-      final output   = [List.generate(outShape[1], (_) => List.filled(outShape[2], 0.0))];
+      final output = [List.generate(outShape[1], (_) => List.filled(outShape[2], 0.0))];
       _midasInterpreter!.run(inputData, output);
 
-      final flat   = output[0].expand((r) => r).toList();
-      final dMin   = flat.reduce(min);
-      final dMax   = flat.reduce(max);
+      final flat = output[0].expand((r) => r).toList();
+      final dMin = flat.reduce(min);
+      final dMax = flat.reduce(max);
       final dRange = (dMax - dMin).abs();
-      if (dRange < 1e-4) return (
-        result: const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — flat depth.', detected: true),
-        depth: null
-      );
+      
+      final depth = List.generate(mdSize, (y) => List.generate(mdSize, (x) => dRange > 1e-6 ? (output[0][y][x] - dMin) / dRange : output[0][y][x]));
 
-      final depth = List.generate(mdSize, (y) => List.generate(mdSize, (x) => (output[0][y][x] - dMin) / dRange));
-
-      // 5-zone analysis from Colab
-      final z = mdSize ~/ 5;
+      final zs = mdSize ~/ 5;
       final zones = List.generate(5, (i) {
         double s = 0; int n = 0;
-        for (int y = i*z; y < (i+1)*z; y++) {
+        for (int y = i * zs; y < (i + 1) * zs; y++) {
           for (int x = 0; x < mdSize; x++) { s += depth[y][x]; n++; }
         }
         return s / n;
       });
 
-      final topMean    = (zones[0] + zones[1]) / 2;
-      final bottomMean = (zones[3] + zones[4]) / 2;
-      final overall    = flat.map((v) => (v - dMin) / dRange).reduce((a, b) => a + b) / (mdSize * mdSize);
-      final variance   = flat.map((v) => pow((v - dMin) / dRange - overall, 2)).reduce((a, b) => a + b) / (mdSize * mdSize);
-      final vertDiff   = bottomMean - topMean;
-      final vertRatio  = vertDiff / overall;
+      final topM = (zones[0] + zones[1]) / 2;
+      final botM = (zones[3] + zones[4]) / 2;
+      final ovr = flat.map((v) => dRange > 1e-6 ? (v - dMin) / dRange : v).reduce((a, b) => a + b) / (mdSize * mdSize);
+      final varD = flat.map((v) => pow((dRange > 1e-6 ? (v - dMin)/dRange : v) - ovr, 2)).reduce((a, b) => a + b) / (mdSize * mdSize);
+      final vdiff = botM - topM;
+      final vratio = ovr > 1e-6 ? vdiff / ovr : 0.0;
+      
+      int nz = 0; double maxZ = -1;
+      for (int i = 0; i < 5; i++) {
+        if (zones[i] > maxZ) { maxZ = zones[i]; nz = i; }
+      }
 
-      // Sky detection (Colab)
       int skyCount = 0;
       for (int y = 0; y < mdSize ~/ 3; y++) {
         for (int x = 0; x < mdSize; x++) {
           final p = resized.getPixel(x, y);
-          if (p.b > p.r + 15 && p.b > p.g && p.b > 90) skyCount++;
+          double rf = p.r / 255.0, gf = p.g / 255.0, bf = p.b / 255.0;
+          if (bf > rf + 0.05 && bf > gf && bf > 0.35) skyCount++;
         }
       }
-      final skyRatio = skyCount / (mdSize * mdSize / 3);
-      final isOverhead = (skyRatio < 0.05 && variance < 0.04 && vertDiff.abs() < 0.25);
+      final skyR = skyCount / (mdSize * mdSize / 3);
 
-      String label;
-      int    score;
-      String tip;
+      double topBr = 0, botBr = 0;
+      for (int y = 0; y < mdSize ~/ 4; y++) {
+        for (int x = 0; x < mdSize; x++) { topBr += resized.getPixel(x, y).luminance / 255.0; }
+      }
+      topBr /= (mdSize * (mdSize ~/ 4));
+      
+      for (int y = 3 * mdSize ~/ 4; y < mdSize; y++) {
+        for (int x = 0; x < mdSize; x++) { botBr += resized.getPixel(x, y).luminance / 255.0; }
+      }
+      botBr /= (mdSize * (mdSize ~/ 4));
 
-      if (isOverhead) {
-        label = 'HIGH ANGLE';
-        score = 75;
-        tip   = 'Camera pointing straight down — overhead shot.';
-      } else if (vertRatio > 0.28 && vertDiff > 0.07 && (skyRatio > 0.04 || zones[4] > zones[0])) {
-        label = 'LOW ANGLE';
-        score = (min(vertRatio / 0.55, 1.0) * 100).round();
-        tip   = 'Excellent! Low angles create drama and dominance.';
-      } else if (vertRatio < -0.28 && vertDiff.abs() > 0.07) {
-        label = 'HIGH ANGLE';
-        score = (min(vertRatio.abs() / 0.55, 1.0) * 100).round();
-        tip   = 'High angle works well for birds-eye shots.';
+      final darkTop = topBr < 0.18 && botBr > topBr + 0.12;
+      bool overhead = skyR < 0.05 && varD < 0.04 && vdiff.abs() < 0.25;
+      if (skyR < 0.05 && varD < 0.025) overhead = true;
+
+      const double STRONG = 0.28, MOD = 0.12, MIND = 0.07;
+      String label, tip; int score;
+
+      if (overhead) {
+        label = "HIGH ANGLE"; score = 75; tip = "Overhead shot. Try an angle for more depth.";
+      } else if (vratio > STRONG && vdiff > MIND && (skyR > 0.04 || darkTop || nz >= 3)) {
+        label = "LOW ANGLE"; score = min(vratio / 0.55, 1.0) * 100 ~/ 1; tip = "Excellent low angle — creates drama and dominance.";
+      } else if (vratio > MOD && vdiff > MIND * 0.6 && (skyR > 0.02 || darkTop || nz >= 3)) {
+        label = "SLIGHT LOW ANGLE"; score = min(vratio / 0.55, 1.0) * 100 ~/ 1; tip = "Slight low angle. Try going lower for more drama.";
+      } else if (vratio < -STRONG && vdiff.abs() > MIND) {
+        label = "HIGH ANGLE"; score = min(vratio.abs() / 0.55, 1.0) * 100 ~/ 1; tip = "High angle — good for overview shots.";
+      } else if (vratio < -MOD && vdiff.abs() > MIND * 0.6) {
+        label = "SLIGHT HIGH ANGLE"; score = min(vratio.abs() / 0.55, 1.0) * 100 ~/ 1; tip = "Slight high angle. Try going higher for more impact.";
       } else {
-        label = 'EYE LEVEL';
-        score = (min(variance / 0.04, 1.0) * 45).round();
-        tip   = 'Standard eye-level shot. Try crouching or raising the camera.';
+        label = "EYE LEVEL"; score = min(varD / 0.04, 1.0) * 45 ~/ 1; tip = "Eye level — try crouching or raising camera.";
       }
 
-      return (
-        result: RuleResult(ruleName: 'Perspective', score: score.clamp(0, 100), tip: tip, detected: true),
-        depth: depth
-      );
+      // Encode label into the tip to pass it safely up to analyseImage
+      return RuleResult(ruleName: 'Perspective', score: score.clamp(0, 100), tip: "\$label|\$tip", detected: true);
     } catch (_) {
-      return (
-        result: const RuleResult(ruleName: 'Perspective', score: 50, tip: 'EYE LEVEL — neutrally balanced.', detected: true),
-        depth: null
-      );
+      return const RuleResult(ruleName: 'Perspective', score: 50, tip: "EYE LEVEL|Eye level — neutrally balanced.", detected: false);
     }
   }
 
-  // ══════════════════════════════════════════════════════════
-  // NIMA — Aesthetic quality score (MobileNet trained on AVA)
-  // Output: 10 probabilities for ratings 1–10
-  // Mean = Σ p(i) × i, normalised to [0,100]
-  // Typical NIMA range: rating 4.5–6.5 for most photos
-  // ══════════════════════════════════════════════════════════
-  Future<double> _getNimaScore(img.Image image) async {
-    if (_nimaInterpreter == null) return 50.0;
+  // ── NIMA MobileNet
+  Future<RuleResult> _nimaScore(img.Image image) async {
+    if (_nimaInterpreter == null) {
+      return const RuleResult(ruleName: 'NIMA', score: 50, tip: '', detected: false);
+    }
+
     try {
-      // NIMA MobileNet input: 224×224, normalised [0, 1]
       final resized = img.copyResize(image, width: 224, height: 224);
-      final input   = List.generate(1, (_) => List.generate(
-        224, (y) => List.generate(224, (x) {
+      final inputData = Float32List(1 * 224 * 224 * 3);
+      final data = inputData as List;
+      int idx = 0;
+      for (int y = 0; y < 224; y++) {
+        for (int x = 0; x < 224; x++) {
           final p = resized.getPixel(x, y);
-          return [p.r / 255.0, p.g / 255.0, p.b / 255.0];
-        }),
-      ));
+          data[idx++] = p.r / 255.0;
+          data[idx++] = p.g / 255.0;
+          data[idx++] = p.b / 255.0;
+        }
+      }
 
       final output = [List.filled(10, 0.0)];
-      _nimaInterpreter!.run(input, output);
+      _nimaInterpreter!.run(inputData, output);
 
-      // The model outputs probabilities directly (softmax already applied)
-      // but we apply softmax anyway to handle logit outputs
-      final raw  = output[0];
-      final maxV = raw.reduce(max);
-      final exps = raw.map((v) => exp(v - maxV)).toList();
-      final sumE = exps.reduce((a, b) => a + b);
-      final prob = exps.map((e) => e / sumE).toList();
-
-      // weighted mean: ratings 1–10 (MATCHING COLAB LOGIC)
       double mean = 0;
-      for (int i = 0; i < 10; i++) {
-        mean += prob[i] * (i + 1);
-      }
+      for (int i = 0; i < 10; i++) mean += output[0][i] * (i + 1);
+      mean = mean / 10 * 100;
+      mean = mean.clamp(0, 100);
 
-      // Colab output is 1-10. Map [4.0, 7.5] -> [0, 100] for the UI
-      return ((mean - 4.0) / 3.5 * 100).clamp(0.0, 100.0);
+      String tip;
+      if (mean >= 65) tip = "Strong overall aesthetic quality.";
+      else if (mean >= 45) tip = "Average quality. Improve composition for better results.";
+      else tip = "Low aesthetic score. Focus on lighting and subject placement.";
+
+      return RuleResult(ruleName: 'NIMA', score: mean.round(), tip: tip, detected: true);
     } catch (_) {
-      return 50.0;
+      return const RuleResult(ruleName: 'NIMA', score: 50, tip: '', detected: false);
     }
-  }
-
-  // ══════════════════════════════════════════════════════════
-  // Professional Suggestion
-  // ══════════════════════════════════════════════════════════
-  String _suggestion(RuleResult r1, RuleResult r2, RuleResult r3,
-      RuleResult r4, RuleResult r5, RuleResult r6, double nima) {
-
-    final active = [r1, r2, r3, r4, r5, r6]
-        .where((r) => r.detected && r.score >= 0).toList();
-    if (active.isEmpty) {
-      return 'Point at a clear subject and tap ANALYSE for feedback.';
-    }
-
-    final issues = active.where((r) => r.score < 65).toList()
-      ..sort((a, b) => a.score.compareTo(b.score));
-    final good   = active.where((r) => r.score >= 80).toList();
-    final nimaStr = nima >= 70 ? 'strong aesthetic quality'
-                  : nima >= 45 ? 'decent aesthetic quality'
-                  : 'low aesthetic score';
-
-    if (issues.isEmpty) {
-      final goodNames = good.map((r) => r.ruleName.toLowerCase()).toList();
-      if (goodNames.length >= 3) {
-        return 'Well composed shot — ${goodNames.take(2).join(', ')} and more are working well. $nimaStr.';
-      }
-      return 'Solid composition. ${good.first.tip} $nimaStr.';
-    }
-
-    final primary   = issues.first;
-    final secondary = issues.length > 1 ? issues[1] : null;
-
-    String intro(RuleResult r) {
-      switch (r.ruleName) {
-        case 'Rule of Thirds'  : return 'Composition could improve — ${r.tip.toLowerCase()}';
-        case 'Leading Lines'   : return 'The shot lacks direction — ${r.tip.toLowerCase()}';
-        case 'Negative Space'  : return 'Framing needs adjustment — ${r.tip.toLowerCase()}';
-        case 'Symmetry'        : return 'Balance could be stronger — ${r.tip.toLowerCase()}';
-        case 'Framing'         : return 'Natural framing is missing — ${r.tip.toLowerCase()}';
-        case 'Perspective'     : return 'Try a different angle — ${r.tip.toLowerCase()}';
-        default                : return r.tip;
-      }
-    }
-
-    String result = intro(primary);
-    if (secondary != null && (primary.score - secondary.score).abs() < 30) {
-      result += '. Also: ${secondary.tip.toLowerCase()}';
-    }
-    if (good.isNotEmpty) {
-      result += '. ${good.first.ruleName} looks good';
-    }
-    return result;
-  }
-
-  CompositionResult _errorResult(String msg) {
-    final e = RuleResult(ruleName: 'Error', score: -1, tip: msg, detected: false);
-    return CompositionResult(
-      ruleOfThirds: e, leadingLines: e, negativeSpace: e,
-      symmetry: e, framing: e, perspective: e,
-      overallScore: 0, nimaScore: 0,
-      bestTip: msg, angleLabel: 'UNKNOWN',
-      professionalSuggestion: msg,
-    );
-  }
-
-  void dispose() {
-    _yolo.dispose();
-    _deeplabInterpreter?.close();
-    _midasInterpreter?.close();
-    _nimaInterpreter?.close();
   }
 }
