@@ -190,12 +190,12 @@ class CompositionAnalyzer {
     }
   }
 
-  Future<CompositionResult> analyseImage(List<int> imageBytes) async {
+  Future<CompositionResult> analyseImage(List<int> imageBytes, String imagePath) async {
     final image = img.decodeImage(Uint8List.fromList(imageBytes));
     if (image == null) return _errorResult('Could not decode image');
 
-    // 1. Run YOLO detection
-    final detections = await _yolo.detect(image);
+    // 1. Run Google ML Kit native object detection
+    final detections = await _yolo.detect(imagePath, image.width, image.height);
 
     // 2. Run Perspective/Depth analysis (reusable for sensor fusion)
     final perspectiveData = await _checkPerspective(image);

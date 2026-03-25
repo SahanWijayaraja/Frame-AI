@@ -188,11 +188,11 @@ class _CameraScreenState extends State<CameraScreen>
       // 4. Run Analysis
       final image = img.decodeImage(bytes);
       if (image != null) {
-        final dets = await _analyzer.yolo.detect(image);
+        final dets = await _analyzer.yolo.detect(cropped.path, image.width, image.height);
         if (mounted) setState(() => _liveSubject = _analyzer.yolo.getPrimarySubject(dets));
       }
 
-      final result = await _analyzer.analyseImage(bytes.toList());
+      final result = await _analyzer.analyseImage(bytes.toList(), cropped.path);
       
       if (mounted) {
         setState(() {
