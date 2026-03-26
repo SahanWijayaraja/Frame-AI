@@ -109,18 +109,39 @@ class CompositionResult {
     if (subjectClass.isEmpty) return "";
     final s = subjectClass.toLowerCase();
 
-    if (s.contains('person') || s.contains('human') || s.contains('man') || s.contains('woman') || s.contains('portrait')) {
+    // 1. Portrait / People
+    if (s.contains('person') || s.contains('human') || s.contains('man') || s.contains('woman') || s.contains('boy') || s.contains('girl') || s.contains('face') || s.contains('smile') || s.contains('clothing') || s.contains('portrait')) {
       return ["For portraits, anchor the eyes near the upper third intersection.", "In portraiture, focus sharply on the nearest eye.", "For people, leave slight lead room in the direction they are looking."][_rng.nextInt(3)];
-    } else if (s.contains('animal') || s.contains('pet') || s.contains('dog') || s.contains('cat')) {
-      return ["For pets, shoot down at their eye level to create a stronger connection.", "Drop your camera height to match the animal's perspective."][_rng.nextInt(2)];
-    } else if (s.contains('building') || s.contains('architecture') || s.contains('house')) {
-      return ["For architecture, ensure your camera vertical is perfectly straight to avoid perspective distortion.", "Look for geometric symmetry when framing buildings."][_rng.nextInt(2)];
-    } else if (s.contains('food') || s.contains('meal') || s.contains('drink')) {
+    } 
+    // 2. Wildlife / Pets
+    else if (s.contains('animal') || s.contains('pet') || s.contains('dog') || s.contains('cat') || s.contains('bird') || s.contains('fish') || s.contains('wildlife') || s.contains('horse') || s.contains('cow') || s.contains('insect')) {
+      return ["For animals, shoot down at their exact eye level to create a stronger connection.", "Drop your camera height to match the animal's perspective."][_rng.nextInt(2)];
+    } 
+    // 3. Architecture / Indoors
+    else if (s.contains('building') || s.contains('architecture') || s.contains('house') || s.contains('room') || s.contains('furniture') || s.contains('window') || s.contains('bridge') || s.contains('stair') || s.contains('tower') || s.contains('skyscraper')) {
+      return ["For architecture, ensure your camera vertical is perfectly straight to avoid perspective distortion.", "Look for exact geometric symmetry when framing buildings."][_rng.nextInt(2)];
+    } 
+    // 4. Culinary / Food
+    else if (s.contains('food') || s.contains('meal') || s.contains('drink') || s.contains('fruit') || s.contains('coffee') || s.contains('plate') || s.contains('vegetable') || s.contains('dessert')) {
       return ["For food, try a 45-degree angle or a straight overhead flat-lay for maximum impact.", "Get closer to capture the texture of the dish."][_rng.nextInt(2)];
-    } else if (s.contains('car') || s.contains('vehicle') || s.contains('truck')) {
-      return ["For vehicles, leave extra lead room in front to imply forward motion.", "Shoot low to make the vehicle look more imposing."][_rng.nextInt(2)];
+    } 
+    // 5. Automotive / Vehicles
+    else if (s.contains('car') || s.contains('vehicle') || s.contains('truck') || s.contains('bicycle') || s.contains('motorcycle') || s.contains('boat') || s.contains('airplane') || s.contains('train')) {
+      return ["For vehicles, leave extra lead room in front to imply forward acceleration.", "Shoot low to make the vehicle look more imposing and dominant."][_rng.nextInt(2)];
     }
-    return ""; // No specific tip for generic objects
+    // 6. Landscape / Nature
+    else if (s.contains('tree') || s.contains('plant') || s.contains('flower') || s.contains('water') || s.contains('sky') || s.contains('mountain') || s.contains('nature') || s.contains('landscape') || s.contains('cloud') || s.contains('sea')) {
+      return ["In nature, place the horizon on the top or bottom third—never the exact center.", "Look for natural foreground elements to frame the raw landscape."][_rng.nextInt(2)];
+    }
+    // 7. Sports / Action
+    else if (s.contains('sport') || s.contains('ball') || s.contains('run') || s.contains('jump') || s.contains('action') || s.contains('game')) {
+      return ["For action shots, anticipate the movement and leave massive lead room in front.", "Freeze the peak of the action by aligning with a strong compositional anchor."][_rng.nextInt(2)];
+    }
+    // 8. Macro / Products
+    else if (s.contains('tool') || s.contains('book') || s.contains('bottle') || s.contains('cup') || s.contains('computer') || s.contains('phone') || s.contains('object') || s.contains('instrument')) {
+      return ["For product photography, seek totally clean negative space to isolate the subject.", "Get extremely close to highlight the micro-details of the object."][_rng.nextInt(2)];
+    }
+    return ""; // No specific tip for unknown classes
   }
 
   static String generateProfessionalSuggestion(List<RuleResult> activeRules, double nima, String subjectClass) {

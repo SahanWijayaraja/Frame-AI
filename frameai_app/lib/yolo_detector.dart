@@ -112,6 +112,11 @@ class YoloDetector {
       d.className.contains('human') ||
       d.className.contains('man') ||
       d.className.contains('woman') ||
+      d.className.contains('boy') ||
+      d.className.contains('girl') ||
+      d.className.contains('face') ||
+      d.className.contains('smile') ||
+      d.className.contains('clothing') ||
       d.className.contains('portrait') ||
       d.className.contains('animal') ||
       d.className.contains('pet') ||

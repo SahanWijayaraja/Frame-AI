@@ -88,6 +88,8 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       await controller.initialize();
       await controller.setFlashMode(FlashMode.off);
+      try { await controller.setFocusMode(FocusMode.auto); } catch (_) {}
+      
       if (mounted) {
         setState(() {
           _controller    = controller;
@@ -213,6 +215,7 @@ class _CameraScreenState extends State<CameraScreen>
       _liveSubject   = null; 
       _frozenFrame   = null;
     });
+    try { _controller?.setFocusMode(FocusMode.auto); } catch (_) {}
   }
 
   @override
@@ -247,12 +250,20 @@ class _CameraScreenState extends State<CameraScreen>
       color: Colors.black,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text('FrameAI',
-              style: TextStyle(
-                color: Color(0xFFFF6B2B), fontSize: 18,
-                fontWeight: FontWeight.bold, letterSpacing: 2,
-              )),
+          Row(
+            children: [
+              const Text('FrameAI',
+                  style: TextStyle(
+                    color: Color(0xFFFF6B2B), fontSize: 18,
+                    fontWeight: FontWeight.bold, letterSpacing: 2,
+                  )),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _showInfoDialog,
+                child: const Icon(Icons.info_outline, color: Colors.white54, size: 20),
+              ),
+            ],
+          ),
           GestureDetector(
             onTap: _toggleFlash,
             child: Container(
@@ -315,19 +326,19 @@ class _CameraScreenState extends State<CameraScreen>
           child: AspectRatio(
             aspectRatio: 3 / 4,
             child: ClipRect(
-              child: OverflowBox(
-                alignment: Alignment.center,
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width:  _controller!.value.previewSize?.height ?? uiW,
-                    height: _controller!.value.previewSize?.width  ?? uiH,
-                    child: _frozenFrame != null 
-                        ? RawImage(image: _frozenFrame!, fit: BoxFit.cover)
-                        : CameraPreview(_controller!),
+              child: _frozenFrame != null
+                ? RawImage(image: _frozenFrame!, fit: BoxFit.cover)
+                : OverflowBox(
+                    alignment: Alignment.center,
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width:  _controller!.value.previewSize?.height ?? uiW,
+                        height: _controller!.value.previewSize?.width  ?? uiH,
+                        child: CameraPreview(_controller!),
+                      ),
+                    ),
                   ),
-                ),
-              ),
             ),
           ),
         ),
@@ -478,6 +489,66 @@ class _CameraScreenState extends State<CameraScreen>
           ),
         ],
       ),
+    );
+  }
+  // ── Info Bottom Sheet ─────────────────────────────────────────
+  void _showInfoDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.4,
+          builder: (_, controller) {
+             return Padding(
+               padding: const EdgeInsets.all(24.0),
+               child: ListView(
+                 controller: controller,
+                 children: const [
+                    Text('FrameAI Photography Engine', style: TextStyle(color: Color(0xFFFF6B2B), fontSize: 24, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 12),
+                    Text('Aesthetic Scoring (NIMA)', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 6),
+                    Text('NIMA (Neural Image Assessment) is an advanced Google deep-learning baseline algorithm that mathematically rates the sheer lighting, tone, noise, and aesthetic "punch" of your photo exactly as professional photography judges would rate it.', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    SizedBox(height: 24),
+                    Text('The 6 Core Rules', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 12),
+                    _RuleInfo(title: '1. Rule of Thirds', desc: 'Anchoring your prominent subject onto visual power intersections creates psychological balance and weight.'),
+                    _RuleInfo(title: '2. Negative Space (Lead Room)', desc: 'Subjects need "breathing room." If they look to the left, logic dictates leaving empty space (lead room) on the left side to balance the frame.'),
+                    _RuleInfo(title: '3. Leading Lines', desc: 'Natural geometric edges (streets, fences, horizons) act as "visual arrows", pulling the viewers eye directly inward, establishing depth.'),
+                    _RuleInfo(title: '4. Symmetry', desc: 'Perfectly centered environments or reflective surfaces induce a profound sense of artificial equilibrium and impact.'),
+                    _RuleInfo(title: '5. Framing', desc: 'Surrounding your subject using environmental edges (doorways, archways, branches) acts as a physical spotlight, hiding generic backgrounds.'),
+                    _RuleInfo(title: '6. Perspective', desc: 'A lens dictates psychological power. Shooting up (Low Angle) makes subjects feel powerful and large, while High Angles impart subtle vulnerability. Eye-level establishes a 1-to-1 neutral connection.'),
+                    SizedBox(height: 24),
+                 ],
+               ),
+             );
+          }
+        );
+      }
+    );
+  }
+}
+
+class _RuleInfo extends StatelessWidget {
+  final String title;
+  final String desc;
+  const _RuleInfo({required this.title, required this.desc});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(color: Color(0xFF00D4AA), fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(desc, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+        ]
+      )
     );
   }
 }
