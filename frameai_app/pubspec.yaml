@@ -15,8 +15,8 @@ dependencies:
   permission_handler: ^11.1.0
   gal: ^2.3.0
   cupertino_icons: ^1.0.2
-  google_mlkit_object_detection: ^0.13.0
-  google_mlkit_image_labeling: ^0.13.0
+  google_mlkit_object_detection: ^0.14.0
+  google_mlkit_image_labeling: ^0.14.0
 
 dev_dependencies:
   flutter_test:
