@@ -105,7 +105,25 @@ class CompositionResult {
     return ["Utilize reflections or archways for symmetry.", "Center perfectly if aiming symmetric."][_rng.nextInt(2)];
   }
 
-  static String generateProfessionalSuggestion(List<RuleResult> activeRules, double nima) {
+  static String getSubjectSpecificTip(String subjectClass) {
+    if (subjectClass.isEmpty) return "";
+    final s = subjectClass.toLowerCase();
+
+    if (s.contains('person') || s.contains('human') || s.contains('man') || s.contains('woman') || s.contains('portrait')) {
+      return ["For portraits, anchor the eyes near the upper third intersection.", "In portraiture, focus sharply on the nearest eye.", "For people, leave slight lead room in the direction they are looking."][_rng.nextInt(3)];
+    } else if (s.contains('animal') || s.contains('pet') || s.contains('dog') || s.contains('cat')) {
+      return ["For pets, shoot down at their eye level to create a stronger connection.", "Drop your camera height to match the animal's perspective."][_rng.nextInt(2)];
+    } else if (s.contains('building') || s.contains('architecture') || s.contains('house')) {
+      return ["For architecture, ensure your camera vertical is perfectly straight to avoid perspective distortion.", "Look for geometric symmetry when framing buildings."][_rng.nextInt(2)];
+    } else if (s.contains('food') || s.contains('meal') || s.contains('drink')) {
+      return ["For food, try a 45-degree angle or a straight overhead flat-lay for maximum impact.", "Get closer to capture the texture of the dish."][_rng.nextInt(2)];
+    } else if (s.contains('car') || s.contains('vehicle') || s.contains('truck')) {
+      return ["For vehicles, leave extra lead room in front to imply forward motion.", "Shoot low to make the vehicle look more imposing."][_rng.nextInt(2)];
+    }
+    return ""; // No specific tip for generic objects
+  }
+
+  static String generateProfessionalSuggestion(List<RuleResult> activeRules, double nima, String subjectClass) {
     if (activeRules.isEmpty) return 'Point at a clear subject for technical coaching.';
 
     final issues = activeRules.where((r) => r.score < 65).toList()
@@ -197,7 +215,10 @@ class CompositionAnalyzer {
     if (subject == null) {
       suggestion = 'Blank frame detected. Please point the camera at a subject or clear landscape.';
     } else {
-      suggestion = _FeedbackEngine.generateProfessionalSuggestion(active, nimaScore);
+      final subjectTip = _FeedbackEngine.getSubjectSpecificTip(subject.className);
+      final generalTip = _FeedbackEngine.generateProfessionalSuggestion(active, nimaScore, subject.className);
+      suggestion = [subjectTip, generalTip].where((s) => s.isNotEmpty).join(' ');
+      
       if (isDepthFallback) {
         suggestion = 'Composition tips based on nearest dominant object. $suggestion';
       }
