@@ -250,6 +250,7 @@ class _CameraScreenState extends State<CameraScreen>
       color: Colors.black,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
           Row(
             children: [
               const Text('FrameAI',
@@ -279,23 +280,24 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ),
-          if (_toastMessage.isNotEmpty)
-            Text(_toastMessage,
+          _toastMessage.isNotEmpty
+            ? Text(_toastMessage,
                 style: const TextStyle(color: Color(0xFF00D4AA), fontSize: 12))
-          else if (_result != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0x33FF6B2B),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0x66FF6B2B)),
-              ),
-              child: Text('NIMA ${_result!.nimaScore.round()}',
-                  style: const TextStyle(
-                    color: Color(0xFFFF6B2B), fontSize: 11,
-                    fontWeight: FontWeight.bold, letterSpacing: 1,
-                  )),
-            ),
+            : _result != null
+              ? Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0x33FF6B2B),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0x66FF6B2B)),
+                  ),
+                  child: Text('NIMA ${_result!.nimaScore.round()}',
+                      style: const TextStyle(
+                        color: Color(0xFFFF6B2B), fontSize: 11,
+                        fontWeight: FontWeight.bold, letterSpacing: 1,
+                      )),
+                )
+              : const SizedBox.shrink(),
         ],
       ),
     );
