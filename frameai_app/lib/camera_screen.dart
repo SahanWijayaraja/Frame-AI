@@ -537,6 +537,8 @@ class _CameraScreenState extends State<CameraScreen>
         ],
       ),
     );
+  }
+
   // ── Cloud Critique Full-Screen Route ───────────────────────────
   void _showCloudCritiqueModal() {
     if (_frozenBytes == null) return;
