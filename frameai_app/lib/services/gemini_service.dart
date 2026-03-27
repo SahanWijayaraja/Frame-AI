@@ -4,7 +4,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 class GeminiService {
   // Developer Note: Replace this with your actual Google Gemini API Key
   // Get one free at: https://aistudio.google.com/app/apikey
-  static const String _geminiApiKey = 'YOUR_GEMINI_API_KEY_HERE';
+  static const String _geminiApiKey = 'AIzaSyBe1xfWV6ZvXpf38g2ikAx-kSEsGPB2MAk';
 
   static const String _prompt = '''
 You are an elite, professional photography coach. Analyze this raw photo.
