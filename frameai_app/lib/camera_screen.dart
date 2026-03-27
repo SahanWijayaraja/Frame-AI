@@ -299,39 +299,64 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ],
           ),
-          GestureDetector(
-            onTap: _toggleFlash,
-            child: Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: flashOn ? const Color(0xFFFFD600) : const Color(0x22FFFFFF),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                flashOn ? Icons.flash_on : Icons.flash_off,
-                color: flashOn ? Colors.black : Colors.white54,
-                size: 20,
-              ),
-            ),
-          ),
-          _toastMessage.isNotEmpty
-            ? Text(_toastMessage,
-                style: const TextStyle(color: Color(0xFF00D4AA), fontSize: 12))
-            : _result != null
-              ? Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0x33FF6B2B),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0x66FF6B2B)),
+          Row(
+            children: [
+              if (_showResults && _frozenBytes != null)
+                GestureDetector(
+                  onTap: _showCloudCritiqueModal,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFFFF6B2B), Color(0xFFE24C00)]),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [BoxShadow(color: const Color(0xFFFF6B2B).withOpacity(0.4), blurRadius: 8)],
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.cloud_sync, color: Colors.white, size: 14),
+                        SizedBox(width: 6),
+                        Text('Cloud AI', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                   ),
-                  child: Text('NIMA ${_result!.nimaScore.round()}',
-                      style: const TextStyle(
-                        color: Color(0xFFFF6B2B), fontSize: 11,
-                        fontWeight: FontWeight.bold, letterSpacing: 1,
-                      )),
-                )
-              : const SizedBox.shrink(),
+                ),
+              GestureDetector(
+                onTap: _toggleFlash,
+                child: Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                    color: flashOn ? const Color(0xFFFFD600) : const Color(0x22FFFFFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    flashOn ? Icons.flash_on : Icons.flash_off,
+                    color: flashOn ? Colors.black : Colors.white54,
+                    size: 18,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _toastMessage.isNotEmpty
+                ? Text(_toastMessage,
+                    style: const TextStyle(color: Color(0xFF00D4AA), fontSize: 12))
+                : _result != null
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33FF6B2B),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0x66FF6B2B)),
+                      ),
+                      child: Text('NIMA ${_result!.nimaScore.round()}',
+                          style: const TextStyle(
+                            color: Color(0xFFFF6B2B), fontSize: 11,
+                            fontWeight: FontWeight.bold, letterSpacing: 1,
+                          )),
+                    )
+                  : const SizedBox.shrink(),
+            ],
+          )
         ],
       ),
     );
@@ -431,31 +456,7 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
 
-          // ── Deep Analysis Cloud Button ────────────
-          if (_showResults && _frozenBytes != null)
-            Positioned(
-              top: 16,
-              right: 16,
-              child: GestureDetector(
-                onTap: _showCloudCritiqueModal,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFFFF6B2B), Color(0xFFE24C00)]),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [BoxShadow(color: const Color(0xFFFF6B2B).withOpacity(0.4), blurRadius: 12, spreadRadius: 2)],
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.cloud_sync, color: Colors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text('Cloud AI Critique', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
+          // Cloud block migrated to _buildTopBar purely natively
           if (_showResults && _result != null)
             Positioned(
               left: 0, right: 0, bottom: 0,
@@ -564,76 +565,72 @@ class _CameraScreenState extends State<CameraScreen>
     
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF151515),
+      backgroundColor: Colors.transparent, // Let Container define borders natively
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.5,
-          builder: (_, controller) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.82, // 82% of total screen size perfectly blocks drags
+          decoration: const BoxDecoration(
+            color: Color(0xFF151515),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
-                      SizedBox(width: 8),
-                      Text('Gemini Photography Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const Divider(color: Colors.white24, height: 32),
-                  Expanded(
-                    child: StreamBuilder<String>(
-                      stream: GeminiService.streamCritique(_frozenBytes!),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(color: Color(0xFFFF6B2B)),
-                                SizedBox(height: 16),
-                                Text('Gemini is analyzing lighting and composition...', style: TextStyle(color: Colors.white70)),
-                              ],
-                            ),
-                          );
-                        }
-                        if (snapshot.hasError) {
-                          final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
-                          return SingleChildScrollView(
-                            controller: controller,
-                            child: MarkdownBody(
-                              data: errStr,
-                              styleSheet: MarkdownStyleSheet(
-                                p: const TextStyle(color: Colors.redAccent, fontSize: 16),
-                              ),
-                            ),
-                          );
-                        }
-
-                        // Use SingleChildScrollView explicitly wired to the Drag Sheet controller
-                        // to perfectly bypass Markdown's internal scroll-swallowing bugs.
-                        return SingleChildScrollView(
-                          controller: controller,
-                          child: MarkdownBody(
-                            data: snapshot.data ?? '',
-                            styleSheet: MarkdownStyleSheet(
-                              h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
-                              p:  const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
-                              listBullet: const TextStyle(color: Color(0xFF00D4AA)),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                  Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
+                  SizedBox(width: 8),
+                  Text('Gemini Photography Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
-            );
-          }
+              const Divider(color: Colors.white24, height: 32),
+              Expanded(
+                child: StreamBuilder<String>(
+                  stream: GeminiService.streamCritique(_frozenBytes!),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(color: Color(0xFFFF6B2B)),
+                            SizedBox(height: 16),
+                            Text('Gemini is analyzing lighting and composition...', style: TextStyle(color: Colors.white70)),
+                          ],
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
+                      return SingleChildScrollView(
+                        child: MarkdownBody(
+                          data: errStr,
+                          styleSheet: MarkdownStyleSheet(
+                            p: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                          ),
+                        ),
+                      );
+                    }
+
+                    // Direct Native Scroll View fully unlocked from DraggableSheet physics
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: MarkdownBody(
+                        data: snapshot.data ?? '',
+                        styleSheet: MarkdownStyleSheet(
+                          h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
+                          p:  const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
+                          listBullet: const TextStyle(color: Color(0xFF00D4AA)),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         );
       }
     );
