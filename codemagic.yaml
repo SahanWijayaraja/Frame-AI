@@ -8,6 +8,7 @@ workflows:
     scripts:
       - name: Setup Secrets Vault
         script: |
+          cd frameai_app || true
           echo "GEMINI_API_KEY=${GEMINI_API_KEY:-PLACE_KEY_IN_CODEMAGIC_DASHBOARD}" > .env
       - name: Get Flutter packages
         script: flutter pub get
