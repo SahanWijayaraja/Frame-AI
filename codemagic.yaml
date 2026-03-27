@@ -4,6 +4,8 @@ workflows:
     working_directory: frameai_app
     max_build_duration: 60
     environment:
+      groups:
+        - common
       flutter: stable
     scripts:
       - name: Get Flutter packages
