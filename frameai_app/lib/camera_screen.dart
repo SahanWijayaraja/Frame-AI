@@ -556,6 +556,12 @@ class _CameraScreenState extends State<CameraScreen>
   void _showCloudCritiqueModal() {
     if (_frozenBytes == null) return;
     
+    // Instantly vanish the local Composition Overlay panel and subject bounding boxes
+    // to give the Cloud critique a clean, distraction-free environment.
+    setState(() {
+      _showResults = false;
+    });
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF151515),
@@ -598,6 +604,7 @@ class _CameraScreenState extends State<CameraScreen>
                         if (snapshot.hasError) {
                           final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
                           return SingleChildScrollView(
+                            controller: controller,
                             child: MarkdownBody(
                               data: errStr,
                               styleSheet: MarkdownStyleSheet(
@@ -607,14 +614,17 @@ class _CameraScreenState extends State<CameraScreen>
                           );
                         }
 
-                        // We accumulate streamed strings from generative AI natively.
-                        return Markdown(
-                          controller: controller, // Link to DraggableScrollableSheet
-                          data: snapshot.data ?? '',
-                          styleSheet: MarkdownStyleSheet(
-                            h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
-                            p:  const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
-                            listBullet: const TextStyle(color: Color(0xFF00D4AA)),
+                        // Use SingleChildScrollView explicitly wired to the Drag Sheet controller
+                        // to perfectly bypass Markdown's internal scroll-swallowing bugs.
+                        return SingleChildScrollView(
+                          controller: controller,
+                          child: MarkdownBody(
+                            data: snapshot.data ?? '',
+                            styleSheet: MarkdownStyleSheet(
+                              h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
+                              p:  const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
+                              listBullet: const TextStyle(color: Color(0xFF00D4AA)),
+                            ),
                           ),
                         );
                       },
