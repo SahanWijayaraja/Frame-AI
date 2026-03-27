@@ -549,8 +549,11 @@ class _CameraScreenState extends State<CameraScreen>
         builder: (_) => GeminiCritiqueScreen(_frozenBytes!),
       ),
     ).then((_) {
-      // When user presses back, clear frozen frame to restore live camera view
-      if (mounted) setState(() => _frozenBytes = null);
+      if (mounted) {
+        setState(() => _frozenBytes = null);
+        // FORCE the OS camera sensor out of picture-taking freeze state
+        _cameraController?.resumePreview();
+      }
     });
   }
 
@@ -663,12 +666,11 @@ class GeminiCritiqueScreen extends StatelessWidget {
               ),
             ),
           ),
-          // Gemini streaming text — uses 'Markdown' (not 'MarkdownBody')
-          // 'Markdown' is a scrollable StatefulWidget with its own ScrollController
-          // so it scrolls perfectly even while StreamBuilder is rebuilding
+          // Single-Shot Static Document Renderer
+          // Completely avoids rebuilding the widget tree, granting 100% flawless scrolling
           Expanded(
-            child: StreamBuilder<String>(
-              stream: GeminiService.streamCritique(imageBytes),
+            child: FutureBuilder<String>(
+              future: GeminiService.getStaticCritique(imageBytes),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -677,7 +679,7 @@ class GeminiCritiqueScreen extends StatelessWidget {
                       children: [
                         CircularProgressIndicator(color: Color(0xFFFF6B2B)),
                         SizedBox(height: 16),
-                        Text('Formulating professional critique...', style: TextStyle(color: Colors.white70)),
+                        Text('Gemini is analyzing lighting and composition...', style: TextStyle(color: Colors.white70)),
                       ],
                     ),
                   );
@@ -685,7 +687,8 @@ class GeminiCritiqueScreen extends StatelessWidget {
                 final text = snapshot.hasError
                   ? '> **Cloud Error:** ${snapshot.error}'.replaceAll('Exception: ', '')
                   : (snapshot.data ?? '');
-                // Markdown widget is natively scrollable — no wrapper needed
+                
+                // Markdown widget renders the entire static block perfectly
                 return Markdown(
                   data: text,
                   padding: const EdgeInsets.all(24),

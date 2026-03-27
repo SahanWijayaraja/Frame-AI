@@ -29,8 +29,8 @@ Keep the tone expert, concise, and highly encouraging. Use emojis to make it rea
     return '$p1$p2$p3$p4$p5';
   }
 
-  /// Streams the markdown response continuously as Gemini generates it.
-  static Stream<String> streamCritique(Uint8List imageBytes) {
+  /// Fetches the entire markdown response in one single API request.
+  static Future<String> getStaticCritique(Uint8List imageBytes) async {
     var apiKey = String.fromEnvironment('GEMINI_API_KEY');
     
     // Fallback exactly to the obfuscated static key if Codemagic flags fail
@@ -46,14 +46,17 @@ Keep the tone expert, concise, and highly encouraging. Use emojis to make it rea
     final promptText = TextPart(_prompt);
     final imagePart  = DataPart('image/jpeg', imageBytes);
 
-    return model.generateContentStream([
-      Content.multi([promptText, imagePart])
-    ]).map((response) => response.text ?? '').handleError((error) {
-      final errorStr = error.toString();
+    try {
+      final response = await model.generateContent([
+        Content.multi([promptText, imagePart])
+      ]);
+      return response.text ?? '';
+    } catch (e) {
+      final errorStr = e.toString();
       if (errorStr.contains('Quota exceeded') || errorStr.contains('limit: 0') || errorStr.contains('429')) {
         throw Exception("⚠️ **Cloud Limit Reached:**\n\nYour Google account is currently geo-blocked from the Free Tier (Quota: 0), or you have completely exhausted your daily requests. \n\nPlease attach a billing account on Google AI Studio to increase your quota limits.");
       }
-      throw Exception("❌ **Cloud Error:** Could not connect to Gemini API. ($error)");
-    });
+      throw Exception("❌ **Cloud Error:** Could not connect to Gemini API. ($errorStr)");
+    }
   }
 }
