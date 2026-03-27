@@ -595,7 +595,7 @@ class _RuleInfo extends StatelessWidget {
   final String title;
   final String desc;
   
-  const _RuleInfo(this.title, this.desc);
+  const _RuleInfo(this.title, this.desc, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -619,7 +619,7 @@ class _RuleInfo extends StatelessWidget {
 class GeminiCritiqueScreen extends StatelessWidget {
   final Uint8List imageBytes;
 
-  const GeminiCritiqueScreen(this.imageBytes);
+  const GeminiCritiqueScreen(this.imageBytes, {super.key});
 
   @override
   Widget build(BuildContext context) {
