@@ -21,19 +21,12 @@ workflows:
           include: true
           source: true
     scripts:
-      - name: Setup DotEnv Vault
-        script: |
-          # The real .env is secret/gitignored, so we inject a placeholder 
-          # on the cloud server just to satisfy the Flutter asset bundler compliler.
-          # To use the real key in CI builds, you add it to Codemagic environment variables:
-          cd frameai_app || true
-          echo "GEMINI_API_KEY=${GEMINI_API_KEY:-PLACE_YOUR_KEY_IN_CODEMAGIC_SECRETS}" > .env
       - name: Get Flutter packages
         script: |
           flutter pub get
       - name: Build Android APK
         script: |
-          flutter build apk --release --no-codesign
+          flutter build apk --release --no-codesign --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
     publishing:

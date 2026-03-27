@@ -2,18 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'camera_screen.dart';
 
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 List<CameraDescription> globalCameras = [];
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    debugPrint("Warning: Configured without .env vault. Cloud API locked. $e");
-  }
-
+  
   try {
     globalCameras = await availableCameras();
   } catch (e) {
