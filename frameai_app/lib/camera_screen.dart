@@ -537,24 +537,10 @@ class _CameraScreenState extends State<CameraScreen>
         ],
       ),
     );
-  }
-  // ── Gemini Cloud AI Streaming Bottom Sheet ────────────────────
-  void _showCloudCritiqueModal() {
-    if (_frozenBytes == null) return;
-    
-    // Instantly vanish the local Composition Overlay panel and subject bounding boxes
-    // to give the Cloud critique a clean, distraction-free environment.
-    setState(() {
-      _showResults = false;
-    });
-    
   // ── Cloud Critique Full-Screen Route ───────────────────────────
   void _showCloudCritiqueModal() {
     if (_frozenBytes == null) return;
-    
-    // Hard-clear local ML Kit overlays before pushing to the dedicated Cloud screen
     setState(() => _showResults = false);
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -588,12 +574,12 @@ class _CameraScreenState extends State<CameraScreen>
                     SizedBox(height: 24),
                     Text('The 6 Core Rules', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     SizedBox(height: 12),
-                    _RuleInfo(title: '1. Rule of Thirds', desc: 'Anchoring your prominent subject onto visual power intersections creates psychological balance and weight.'),
-                    _RuleInfo(title: '2. Negative Space (Lead Room)', desc: 'Subjects need "breathing room." If they look to the left, logic dictates leaving empty space (lead room) on the left side to balance the frame.'),
-                    _RuleInfo(title: '3. Leading Lines', desc: 'Natural geometric edges (streets, fences, horizons) act as "visual arrows", pulling the viewers eye directly inward, establishing depth.'),
-                    _RuleInfo(title: '4. Symmetry', desc: 'Perfectly centered environments or reflective surfaces induce a profound sense of artificial equilibrium and impact.'),
-                    _RuleInfo(title: '5. Framing', desc: 'Surrounding your subject using environmental edges (doorways, archways, branches) acts as a physical spotlight, hiding generic backgrounds.'),
-                    _RuleInfo(title: '6. Perspective', desc: 'A lens dictates psychological power. Shooting up (Low Angle) makes subjects feel powerful and large, while High Angles impart subtle vulnerability. Eye-level establishes a 1-to-1 neutral connection.'),
+                    _RuleInfo('1. Rule of Thirds', 'Anchoring your prominent subject onto visual power intersections creates psychological balance and weight.'),
+                    _RuleInfo('2. Negative Space (Lead Room)', 'Subjects need "breathing room." If they look to the left, logic dictates leaving empty space (lead room) on the left side to balance the frame.'),
+                    _RuleInfo('3. Leading Lines', 'Natural geometric edges (streets, fences, horizons) act as "visual arrows", pulling the viewers eye directly inward, establishing depth.'),
+                    _RuleInfo('4. Symmetry', 'Perfectly centered environments or reflective surfaces induce a profound sense of artificial equilibrium and impact.'),
+                    _RuleInfo('5. Framing', 'Surrounding your subject using environmental edges (doorways, archways, branches) acts as a physical spotlight, hiding generic backgrounds.'),
+                    _RuleInfo('6. Perspective', 'A lens dictates psychological power. Shooting up (Low Angle) makes subjects feel powerful and large, while High Angles impart subtle vulnerability. Eye-level establishes a 1-to-1 neutral connection.'),
                     SizedBox(height: 24),
                  ],
                ),
