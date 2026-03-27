@@ -39,7 +39,7 @@ Keep the tone expert, concise, and highly encouraging. Use emojis to make it rea
     }
 
     final model = GenerativeModel(
-      model: 'gemini-1.5-flash', // The universally available massive free-tier checkpoint
+      model: 'gemini-2.5-flash', // Matching the exact stable checkpoint utilized in BKG123/frame-ai
       apiKey: apiKey,
     );
 
