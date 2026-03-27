@@ -558,7 +558,7 @@ class _CameraScreenState extends State<CameraScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => GeminiCritiqueScreen(imageBytes: _frozenBytes!),
+        builder: (_) => GeminiCritiqueScreen(_frozenBytes!),
       ),
     );
   }
@@ -608,7 +608,9 @@ class _CameraScreenState extends State<CameraScreen>
 class _RuleInfo extends StatelessWidget {
   final String title;
   final String desc;
-  const _RuleInfo({required this.title, required this.desc});
+  
+  const _RuleInfo(this.title, this.desc, {Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -631,7 +633,7 @@ class _RuleInfo extends StatelessWidget {
 class GeminiCritiqueScreen extends StatelessWidget {
   final Uint8List imageBytes;
 
-  const GeminiCritiqueScreen({super.key, required this.imageBytes});
+  const GeminiCritiqueScreen(this.imageBytes, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
