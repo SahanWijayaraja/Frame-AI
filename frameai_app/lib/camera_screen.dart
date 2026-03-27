@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // compute()
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:gal/gal.dart';
@@ -9,6 +10,32 @@ import 'score_box_widget.dart';
 import 'camera_overlay_painter.dart';
 import 'yolo_detector.dart';
 import 'main.dart';
+import 'services/gemini_service.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+
+// ── Top-level isolate function for crop (must be top-level for compute()) ──
+Future<String> _cropTo3x4Isolate(String path) async {
+  try {
+    final bytes = await File(path).readAsBytes();
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) return path;
+
+    int targetW = image.width;
+    int targetH = (image.width * 4 / 3).round();
+    if (targetH > image.height) {
+      targetH = image.height;
+      targetW = (image.height * 3 / 4).round();
+    }
+    final xOff = ((image.width  - targetW) / 2).round();
+    final yOff = ((image.height - targetH) / 2).round();
+    final cropped = img.copyCrop(image, x: xOff, y: yOff, width: targetW, height: targetH);
+    // Write back to same temp path
+    await File(path).writeAsBytes(img.encodeJpg(cropped, quality: 90));
+    return path;
+  } catch (_) {
+    return path;
+  }
+}
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -28,6 +55,7 @@ class _CameraScreenState extends State<CameraScreen>
   
   // Freeze frame state
   ui.Image? _frozenFrame;
+  Uint8List? _frozenBytes;
 
   FlashMode _flashMode = FlashMode.off;   // Flash OFF by default
   CompositionResult? _result;
@@ -81,7 +109,7 @@ class _CameraScreenState extends State<CameraScreen>
     );
     final controller = CameraController(
       camera, 
-      ResolutionPreset.max, // 3:4 on most sensors
+      ResolutionPreset.high,  // 1080p — imperceptible quality difference vs max, but ~4× less thermal load
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
@@ -172,28 +200,33 @@ class _CameraScreenState extends State<CameraScreen>
       _showResults = false; 
       _errorMessage = ''; 
       _frozenFrame  = null;
+      _frozenBytes  = null; // Reset frozen bytes
     });
 
     try {
       // 1. Capture still
       final file = await _controller!.takePicture();
       
-      // 2. Crop to 3:4
+      // 2. Crop to 3:4 — use compute() to offload pixel work off the main thread
       final cropped = await _cropTo3x4(file.path);
-      final bytes   = await cropped.readAsBytes();
+      
+      // 3. Read bytes ONCE and reuse everywhere
+      final bytes = await cropped.readAsBytes();
+      if (mounted) setState(() => _frozenBytes = bytes);
 
-      // 3. Freeze UI
+      // 4. Freeze UI from the already-read bytes (no second readAsBytes call)
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       if (mounted) setState(() => _frozenFrame = frame.image);
 
-      // 4. Run Analysis
+      // 5. Run object detection (reuse the path we already have)
       final image = img.decodeImage(bytes);
       if (image != null) {
         final dets = await _analyzer.yolo.detect(cropped.path, image.width, image.height);
         if (mounted) setState(() => _liveSubject = _analyzer.yolo.getPrimarySubject(dets));
       }
 
+      // 6. Run full composition analysis — pass same bytes list, no re-read
       final result = await _analyzer.analyseImage(bytes.toList(), cropped.path);
       
       if (mounted) {
@@ -214,6 +247,7 @@ class _CameraScreenState extends State<CameraScreen>
       _result        = null; 
       _liveSubject   = null; 
       _frozenFrame   = null;
+      _frozenBytes   = null;
     });
     try { _controller?.setFocusMode(FocusMode.auto); } catch (_) {}
   }
@@ -397,6 +431,31 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
 
+          // ── Deep Analysis Cloud Button ────────────
+          if (_showResults && _frozenBytes != null)
+            Positioned(
+              top: 16,
+              right: 16,
+              child: GestureDetector(
+                onTap: _showCloudCritiqueModal,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFFFF6B2B), Color(0xFFE24C00)]),
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [BoxShadow(color: const Color(0xFFFF6B2B).withOpacity(0.4), blurRadius: 12, spreadRadius: 2)],
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.cloud_sync, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text('Cloud AI Critique', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
           if (_showResults && _result != null)
             Positioned(
               left: 0, right: 0, bottom: 0,
@@ -493,6 +552,76 @@ class _CameraScreenState extends State<CameraScreen>
       ),
     );
   }
+  // ── Gemini Cloud AI Streaming Bottom Sheet ────────────────────
+  void _showCloudCritiqueModal() {
+    if (_frozenBytes == null) return;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF151515),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.5,
+          builder: (_, controller) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
+                      SizedBox(width: 8),
+                      Text('Gemini Photography Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const Divider(color: Colors.white24, height: 32),
+                  Expanded(
+                    child: StreamBuilder<String>(
+                      stream: GeminiService.streamCritique(_frozenBytes!),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(color: Color(0xFFFF6B2B)),
+                                SizedBox(height: 16),
+                                Text('Gemini is analyzing lighting and composition...', style: TextStyle(color: Colors.white70)),
+                              ],
+                            ),
+                          );
+                        }
+                        
+                        if (snapshot.hasError) {
+                          return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)));
+                        }
+
+                        // We accumulate streamed strings from generative AI natively.
+                        return Markdown(
+                          controller: controller, // Link to DraggableScrollableSheet
+                          data: snapshot.data ?? '',
+                          styleSheet: MarkdownStyleSheet(
+                            h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
+                            p:  const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
+                            listBullet: const TextStyle(color: Color(0xFF00D4AA)),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
+  }
+
   // ── Info Bottom Sheet ─────────────────────────────────────────
   void _showInfoDialog() {
     showModalBottomSheet(
