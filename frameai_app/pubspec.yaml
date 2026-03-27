@@ -27,8 +27,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/models/yolov8n_int8.tflite
     - assets/models/deeplabv3.tflite
     - assets/models/midas_small.tflite
     - assets/models/nima_mobilenet.tflite

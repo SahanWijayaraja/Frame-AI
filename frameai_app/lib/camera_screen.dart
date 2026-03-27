@@ -144,26 +144,11 @@ class _CameraScreenState extends State<CameraScreen>
   // ── Crop utility — ensure captured photo is exactly 3:4 ────────
   Future<File> _cropTo3x4(String path) async {
     try {
-      final bytes = await File(path).readAsBytes();
-      img.Image? image = img.decodeImage(bytes);
-      if (image == null) return File(path);
-
-      // Target aspect ratio 3:4 (width:height)
-      int targetW = image.width;
-      int targetH = (image.width * 4 / 3).round();
-
-      if (targetH > image.height) {
-        // Source is wider/shorter than 3:4 (e.g. 16:9 landscape)
-        targetH = image.height;
-        targetW = (image.height * 3 / 4).round();
-      }
-
-      final xOff = ((image.width - targetW) / 2).round();
-      final yOff = ((image.height - targetH) / 2).round();
-
-      final cropped = img.copyCrop(image, x: xOff, y: yOff, width: targetW, height: targetH);
+      // Offload heavy image calculation logic natively to a background Isolate 
+      // preventing the global Flutter UI from stuttering during capture strings.
+      final processedBytes = await compute(_process3x4Crop, [path]);
       final out = File(path);
-      await out.writeAsBytes(img.encodeJpg(cropped));
+      await out.writeAsBytes(processedBytes);
       return out;
     } catch (_) {
       return File(path);
@@ -565,72 +550,71 @@ class _CameraScreenState extends State<CameraScreen>
     
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent, // Let Container define borders natively
+      backgroundColor: const Color(0xFF151515),
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.82, // 82% of total screen size perfectly blocks drags
-          decoration: const BoxDecoration(
-            color: Color(0xFF151515),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.5,
+          builder: (_, controller) {
+            // Must link root-level ListView to the controller for scroll interactions to translate natively
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: ListView(
+                controller: controller,
                 children: [
-                  Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
-                  SizedBox(width: 8),
-                  Text('Gemini Photography Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const Divider(color: Colors.white24, height: 32),
-              Expanded(
-                child: StreamBuilder<String>(
-                  stream: GeminiService.streamCritique(_frozenBytes!),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: Color(0xFFFF6B2B)),
-                            SizedBox(height: 16),
-                            Text('Gemini is analyzing lighting and composition...', style: TextStyle(color: Colors.white70)),
-                          ],
-                        ),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
-                      return SingleChildScrollView(
-                        child: MarkdownBody(
+                  const Row(
+                    children: [
+                      Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
+                      SizedBox(width: 8),
+                      Text('Gemini Photography Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const Divider(color: Colors.white24, height: 32),
+                  StreamBuilder<String>(
+                    stream: GeminiService.streamCritique(_frozenBytes!),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircularProgressIndicator(color: Color(0xFFFF6B2B)),
+                                SizedBox(height: 16),
+                                Text('Gemini is analyzing lighting and composition...', style: TextStyle(color: Colors.white70)),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
+                        return MarkdownBody(
                           data: errStr,
                           styleSheet: MarkdownStyleSheet(
                             p: const TextStyle(color: Colors.redAccent, fontSize: 16),
                           ),
-                        ),
-                      );
-                    }
+                        );
+                      }
 
-                    // Direct Native Scroll View fully unlocked from DraggableSheet physics
-                    return SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      child: MarkdownBody(
+                      // Return purely mapped content allowing the surrounding ListView to manage all vertical physics
+                      return MarkdownBody(
                         data: snapshot.data ?? '',
                         styleSheet: MarkdownStyleSheet(
                           h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
                           p:  const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
                           listBullet: const TextStyle(color: Color(0xFF00D4AA)),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          }
         );
       }
     );
@@ -696,4 +680,28 @@ class _RuleInfo extends StatelessWidget {
       )
     );
   }
+}
+
+// ── Background CPU Offloading ───────────────────────────────────────
+// Extracts raw photo decoding & cropping arrays out of the primary UI thread natively preventing 3-second application freezes 
+// on devices dealing with bulky 12+ Megapixel camera hardware inputs.
+Future<List<int>> _process3x4Crop(List<dynamic> args) async {
+  final String path = args[0] as String;
+  final List<int> bytes = await File(path).readAsBytes();
+  img.Image? image = img.decodeImage(Uint8List.fromList(bytes));
+  if (image == null) return bytes;
+
+  int targetW = image.width;
+  int targetH = (image.width * 4 / 3).round();
+
+  if (targetH > image.height) {
+    targetH = image.height;
+    targetW = (image.height * 3 / 4).round();
+  }
+
+  final xOff = ((image.width - targetW) / 2).round();
+  final yOff = ((image.height - targetH) / 2).round();
+
+  final cropped = img.copyCrop(image, x: xOff, y: yOff, width: targetW, height: targetH);
+  return img.encodeJpg(cropped);
 }
