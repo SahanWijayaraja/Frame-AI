@@ -7,7 +7,8 @@ workflows:
       flutter: stable
     scripts:
       - name: Setup Secrets Vault
-        script: echo "GEMINI_API_KEY=${GEMINI_API_KEY:-PLACE_KEY_IN_CODEMAGIC_DASHBOARD}" > .env
+        script: |
+          echo "GEMINI_API_KEY=${GEMINI_API_KEY:-PLACE_KEY_IN_CODEMAGIC_DASHBOARD}" > .env
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build APK
