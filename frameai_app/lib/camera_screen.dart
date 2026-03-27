@@ -548,7 +548,10 @@ class _CameraScreenState extends State<CameraScreen>
       MaterialPageRoute(
         builder: (_) => GeminiCritiqueScreen(_frozenBytes!),
       ),
-    );
+    ).then((_) {
+      // When user presses back, clear frozen frame to restore live camera view
+      if (mounted) setState(() => _frozenBytes = null);
+    });
   }
 
   // ── Info Bottom Sheet ─────────────────────────────────────────
@@ -623,6 +626,12 @@ class GeminiCritiqueScreen extends StatelessWidget {
 
   const GeminiCritiqueScreen(this.imageBytes, {super.key});
 
+  static final _mdStyle = MarkdownStyleSheet(
+    h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
+    p:  const TextStyle(color: Colors.white, fontSize: 16, height: 1.7),
+    listBullet: const TextStyle(color: Color(0xFF00D4AA)),
+  );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -639,70 +648,54 @@ class GeminiCritiqueScreen extends StatelessWidget {
           ],
         ),
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Preview Thumbnail Header
-            Container(
-              width: double.infinity,
-              height: 120,
-              decoration: BoxDecoration(
-                image: DecorationImage(
-                  image: MemoryImage(imageBytes),
-                  fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.5), BlendMode.darken),
-                ),
+      body: Column(
+        children: [
+          // Photo thumbnail
+          Container(
+            width: double.infinity,
+            height: 120,
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: MemoryImage(imageBytes),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  Colors.black.withOpacity(0.5), BlendMode.darken),
               ),
             ),
-            
-            // Native Unrestricted Scroll View for Streaming Markdown
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(24.0),
-                child: StreamBuilder<String>(
-                  stream: GeminiService.streamCritique(imageBytes),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(color: Color(0xFFFF6B2B)),
-                              SizedBox(height: 16),
-                              Text('Formulating professional critique...', style: TextStyle(color: Colors.white70)),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
-                      return MarkdownBody(
-                        data: errStr,
-                        styleSheet: MarkdownStyleSheet(
-                          p: const TextStyle(color: Colors.redAccent, fontSize: 16),
-                        ),
-                      );
-                    }
-
-                    // Flawless Native Scroll Tracking completely unbound from Draggable conflicts
-                    return MarkdownBody(
-                      data: snapshot.data ?? '',
-                      styleSheet: MarkdownStyleSheet(
-                        h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
-                        p:  const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
-                        listBullet: const TextStyle(color: Color(0xFF00D4AA)),
-                      ),
-                    );
-                  },
-                ),
-              ),
+          ),
+          // Gemini streaming text — uses 'Markdown' (not 'MarkdownBody')
+          // 'Markdown' is a scrollable StatefulWidget with its own ScrollController
+          // so it scrolls perfectly even while StreamBuilder is rebuilding
+          Expanded(
+            child: StreamBuilder<String>(
+              stream: GeminiService.streamCritique(imageBytes),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Color(0xFFFF6B2B)),
+                        SizedBox(height: 16),
+                        Text('Formulating professional critique...', style: TextStyle(color: Colors.white70)),
+                      ],
+                    ),
+                  );
+                }
+                final text = snapshot.hasError
+                  ? '> **Cloud Error:** ${snapshot.error}'.replaceAll('Exception: ', '')
+                  : (snapshot.data ?? '');
+                // Markdown widget is natively scrollable — no wrapper needed
+                return Markdown(
+                  data: text,
+                  padding: const EdgeInsets.all(24),
+                  physics: const BouncingScrollPhysics(),
+                  styleSheet: _mdStyle,
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
