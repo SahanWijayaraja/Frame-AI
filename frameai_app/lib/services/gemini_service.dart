@@ -38,20 +38,22 @@ Keep the tone expert, concise, and highly encouraging. Use emojis to make it rea
       apiKey = _obfuscatedKey;
     }
 
-    try {
-      final model = GenerativeModel(
-        model: 'gemini-2.0-flash', // The absolute latest free Gemini model version
-        apiKey: apiKey,
-      );
+    final model = GenerativeModel(
+      model: 'gemini-1.5-flash', // The universally available massive free-tier checkpoint
+      apiKey: apiKey,
+    );
 
-      final promptText = TextPart(_prompt);
-      final imagePart  = DataPart('image/jpeg', imageBytes);
+    final promptText = TextPart(_prompt);
+    final imagePart  = DataPart('image/jpeg', imageBytes);
 
-      return model.generateContentStream([
-        Content.multi([promptText, imagePart])
-      ]).map((response) => response.text ?? '');
-    } catch (e) {
-      return Stream.value("❌ **Cloud Error:** Could not connect to Gemini API. ($e)");
-    }
+    return model.generateContentStream([
+      Content.multi([promptText, imagePart])
+    ]).map((response) => response.text ?? '').handleError((error) {
+      final errorStr = error.toString();
+      if (errorStr.contains('Quota exceeded') || errorStr.contains('limit: 0') || errorStr.contains('429')) {
+        throw Exception("⚠️ **Cloud Limit Reached:**\n\nYour Google account is currently geo-blocked from the Free Tier (Quota: 0), or you have completely exhausted your daily requests. \n\nPlease attach a billing account on Google AI Studio to increase your quota limits.");
+      }
+      throw Exception("❌ **Cloud Error:** Could not connect to Gemini API. ($error)");
+    });
   }
 }

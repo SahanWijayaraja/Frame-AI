@@ -595,9 +595,16 @@ class _CameraScreenState extends State<CameraScreen>
                             ),
                           );
                         }
-                        
                         if (snapshot.hasError) {
-                          return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)));
+                          final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
+                          return SingleChildScrollView(
+                            child: MarkdownBody(
+                              data: errStr,
+                              styleSheet: MarkdownStyleSheet(
+                                p: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                              ),
+                            ),
+                          );
                         }
 
                         // We accumulate streamed strings from generative AI natively.
