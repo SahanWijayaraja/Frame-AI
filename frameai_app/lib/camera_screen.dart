@@ -548,75 +548,18 @@ class _CameraScreenState extends State<CameraScreen>
       _showResults = false;
     });
     
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF151515),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.5,
-          builder: (_, controller) {
-            // Must link root-level ListView to the controller for scroll interactions to translate natively
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: ListView(
-                controller: controller,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
-                      SizedBox(width: 8),
-                      Text('Gemini Photography Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const Divider(color: Colors.white24, height: 32),
-                  StreamBuilder<String>(
-                    stream: GeminiService.streamCritique(_frozenBytes!),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 32),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(color: Color(0xFFFF6B2B)),
-                                SizedBox(height: 16),
-                                Text('Gemini is analyzing lighting and composition...', style: TextStyle(color: Colors.white70)),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
-                        return MarkdownBody(
-                          data: errStr,
-                          styleSheet: MarkdownStyleSheet(
-                            p: const TextStyle(color: Colors.redAccent, fontSize: 16),
-                          ),
-                        );
-                      }
+  // ── Cloud Critique Full-Screen Route ───────────────────────────
+  void _showCloudCritiqueModal() {
+    if (_frozenBytes == null) return;
+    
+    // Hard-clear local ML Kit overlays before pushing to the dedicated Cloud screen
+    setState(() => _showResults = false);
 
-                      // Return purely mapped content allowing the surrounding ListView to manage all vertical physics
-                      return MarkdownBody(
-                        data: snapshot.data ?? '',
-                        styleSheet: MarkdownStyleSheet(
-                          h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
-                          p:  const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
-                          listBullet: const TextStyle(color: Color(0xFF00D4AA)),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            );
-          }
-        );
-      }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GeminiCritiqueScreen(imageBytes: _frozenBytes!),
+      ),
     );
   }
 
@@ -678,6 +621,99 @@ class _RuleInfo extends StatelessWidget {
           Text(desc, style: const TextStyle(color: Colors.white70, fontSize: 14)),
         ]
       )
+    );
+  }
+}
+
+// ── Dedicated Cloud Analysis Screen ──────────────────────────────────
+// Moving Gemini completely off standard overlapping BottomSheets into a 
+// dedicated Route 100% permanently eliminates all Drag-Scroll conflict bugs.
+class GeminiCritiqueScreen extends StatelessWidget {
+  final Uint8List imageBytes;
+
+  const GeminiCritiqueScreen({super.key, required this.imageBytes});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Row(
+          children: [
+            Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
+            SizedBox(width: 12),
+            Text('Gemini AI Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Preview Thumbnail Header
+            Container(
+              width: double.infinity,
+              height: 120,
+              decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: MemoryImage(imageBytes),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.5), BlendMode.darken),
+                ),
+              ),
+            ),
+            
+            // Native Unrestricted Scroll View for Streaming Markdown
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(24.0),
+                child: StreamBuilder<String>(
+                  stream: GeminiService.streamCritique(imageBytes),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 48),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(color: Color(0xFFFF6B2B)),
+                              SizedBox(height: 16),
+                              Text('Formulating professional critique...', style: TextStyle(color: Colors.white70)),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      final errStr = snapshot.error.toString().replaceAll('Exception: ', '');
+                      return MarkdownBody(
+                        data: errStr,
+                        styleSheet: MarkdownStyleSheet(
+                          p: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                        ),
+                      );
+                    }
+
+                    // Flawless Native Scroll Tracking completely unbound from Draggable conflicts
+                    return MarkdownBody(
+                      data: snapshot.data ?? '',
+                      styleSheet: MarkdownStyleSheet(
+                        h2: const TextStyle(color: Color(0xFFFF6B2B), fontWeight: FontWeight.bold, height: 1.5, fontSize: 18),
+                        p:  const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+                        listBullet: const TextStyle(color: Color(0xFF00D4AA)),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
