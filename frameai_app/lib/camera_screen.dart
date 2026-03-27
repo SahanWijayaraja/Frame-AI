@@ -550,7 +550,7 @@ class _CameraScreenState extends State<CameraScreen>
       ),
     ).then((_) {
       if (mounted) {
-        setState(() => _frozenBytes = null);
+        _closeResults();
         // FORCE the OS camera sensor out of picture-taking freeze state
         _controller?.resumePreview();
       }
