@@ -53,6 +53,19 @@ class _CameraScreenState extends State<CameraScreen>
   bool _showResults   = false;
   bool _isSaving      = false;
   
+  // Hardware control states
+  double _minZoom = 1.0;
+  double _maxZoom = 1.0;
+  double _baseZoom = 1.0;
+  double _currentZoom = 1.0;
+
+  double _minExposureOffset = 0.0;
+  double _maxExposureOffset = 0.0;
+  double _currentExposureOffset = 0.0;
+
+  Offset? _focusPoint;
+  bool _showFocusRing = false;
+
   // Freeze frame state
   ui.Image? _frozenFrame;
   Uint8List? _frozenBytes;
@@ -118,12 +131,26 @@ class _CameraScreenState extends State<CameraScreen>
       await controller.setFlashMode(FlashMode.off);
       try { await controller.setFocusMode(FocusMode.auto); } catch (_) {}
       
+      final minZ = await controller.getMinZoomLevel();
+      final maxZ = await controller.getMaxZoomLevel();
+      final minE = await controller.getMinExposureOffset();
+      final maxE = await controller.getMaxExposureOffset();
+      
       if (mounted) {
         setState(() {
           _controller    = controller;
           _isInitialised = true;
           _errorMessage  = '';
           _flashMode     = FlashMode.off;
+          
+          _minZoom = minZ;
+          _maxZoom = maxZ;
+          _currentZoom = minZ;
+          _baseZoom = minZ;
+          
+          _minExposureOffset = minE;
+          _maxExposureOffset = maxE;
+          _currentExposureOffset = 0.0;
         });
       }
     } catch (e) {
@@ -381,7 +408,72 @@ class _CameraScreenState extends State<CameraScreen>
                       child: SizedBox(
                         width:  _controller!.value.previewSize?.height ?? uiW,
                         height: _controller!.value.previewSize?.width  ?? uiH,
-                        child: CameraPreview(_controller!),
+                        child: Builder(
+                          builder: (ctx) => GestureDetector(
+                            onScaleStart: (details) {
+                              if (_frozenFrame != null) return;
+                              _baseZoom = _currentZoom;
+                            },
+                            onScaleUpdate: (details) async {
+                              if (_frozenFrame != null || _controller == null) return;
+                              double newZoom = (_baseZoom * details.scale).clamp(_minZoom, _maxZoom);
+                              if (newZoom != _currentZoom) {
+                                setState(() => _currentZoom = newZoom);
+                                await _controller!.setZoomLevel(newZoom);
+                              }
+                            },
+                            onTapDown: (details) async {
+                              if (_frozenFrame != null || _controller == null) return;
+                              
+                              // Map physical screen coordinates perfectly into native camera sensor 0.0-1.0 ranges
+                              final RenderBox box = ctx.findRenderObject() as RenderBox;
+                              final localOffset = box.globalToLocal(details.globalPosition);
+                              
+                              final double width = box.size.width;
+                              final double height = box.size.height;
+                              
+                              final double relativeX = localOffset.dx / width;
+                              final double relativeY = localOffset.dy / height;
+                              final point = Offset(relativeX.clamp(0.0, 1.0), relativeY.clamp(0.0, 1.0));
+                              
+                              setState(() {
+                                _focusPoint = localOffset;
+                                _showFocusRing = true;
+                              });
+                              
+                              try {
+                                await _controller!.setFocusPoint(point);
+                                await _controller!.setFocusMode(FocusMode.auto);
+                                // Bind exposure directly to focal area natively copying iOS optics
+                                await _controller!.setExposurePoint(point);
+                                await _controller!.setExposureMode(ExposureMode.auto);
+                                
+                                Future.delayed(const Duration(milliseconds: 1000), () {
+                                  if (mounted) setState(() => _showFocusRing = false);
+                                });
+                              } catch (_) {}
+                            },
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                CameraPreview(_controller!),
+                                // Beautiful aesthetic tap-ring projection mimicking the iPhone iOS physical camera UI
+                                if (_showFocusRing && _focusPoint != null)
+                                  Positioned(
+                                    left: _focusPoint!.dx - 30,
+                                    top: _focusPoint!.dy - 30,
+                                    child: Container(
+                                      width: 60, height: 60,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: const Color(0xFFFFD600), width: 1.5),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -417,6 +509,39 @@ class _CameraScreenState extends State<CameraScreen>
               ),
             ),
           ),
+
+          // Professional vertical slider strictly controlling exposure EV biases
+          if (!_isAnalysing && _frozenFrame == null && _minExposureOffset < _maxExposureOffset)
+            Positioned(
+              right: 8,
+              top: uiH * 0.25,
+              bottom: uiH * 0.25,
+              child: RotatedBox(
+                quarterTurns: 3,
+                child: SizedBox(
+                  width: uiH * 0.5, // 50% of the screen height dynamically scaled
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 1.5,
+                      activeTrackColor: const Color(0xFFFFD600),
+                      inactiveTrackColor: Colors.white24,
+                      thumbColor: const Color(0xFFFFD600),
+                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                      overlayColor: const Color(0x33FFD600),
+                    ),
+                    child: Slider(
+                      value: _currentExposureOffset,
+                      min: _minExposureOffset,
+                      max: _maxExposureOffset,
+                      onChanged: (val) {
+                        setState(() => _currentExposureOffset = val);
+                        _controller?.setExposureOffset(val);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           if (_isAnalysing)
             Container(
@@ -515,25 +640,22 @@ class _CameraScreenState extends State<CameraScreen>
             ),
           ),
 
-          // Close results button
-          GestureDetector(
-            onTap: _showResults ? _closeResults : null,
-            child: Container(
-              width: 46, height: 46,
-              decoration: BoxDecoration(
-                color: _showResults ? const Color(0x33FF6B2B) : const Color(0x22FFFFFF),
-                borderRadius: BorderRadius.circular(23),
-                border: Border.all(
-                  color: _showResults ? const Color(0xFFFF6B2B) : Colors.white24,
+          // Close results button (Dead Camera flip button aggressively stripped from baseline)
+          if (_showResults)
+            GestureDetector(
+              onTap: _closeResults,
+              child: Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  color: const Color(0x33FF6B2B),
+                  borderRadius: BorderRadius.circular(23),
+                  border: Border.all(color: const Color(0xFFFF6B2B)),
                 ),
+                child: const Icon(Icons.close, color: Color(0xFFFF6B2B), size: 20),
               ),
-              child: Icon(
-                _showResults ? Icons.close : Icons.photo_camera_outlined,
-                color: _showResults ? const Color(0xFFFF6B2B) : Colors.white54,
-                size: 20,
-              ),
-            ),
-          ),
+            )
+          else
+            const SizedBox(width: 46, height: 46),
         ],
       ),
     );
@@ -666,11 +788,10 @@ class GeminiCritiqueScreen extends StatelessWidget {
               ),
             ),
           ),
-          // Single-Shot Static Document Renderer
-          // Completely avoids rebuilding the widget tree, granting 100% flawless scrolling
+          // Single-Shot Static Document Renderer natively fed by aggressively compressed Isolate sequence
           Expanded(
             child: FutureBuilder<String>(
-              future: GeminiService.getStaticCritique(imageBytes),
+              future: compute(_downscaleForCloud, imageBytes).then((optimized) => GeminiService.getStaticCritique(optimized)),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -707,6 +828,14 @@ class GeminiCritiqueScreen extends StatelessWidget {
 // ── Background CPU Offloading ───────────────────────────────────────
 // Extracts raw photo decoding & cropping arrays out of the primary UI thread natively preventing 3-second application freezes 
 // on devices dealing with bulky 12+ Megapixel camera hardware inputs.
+Future<Uint8List> _downscaleForCloud(Uint8List bytes) async {
+  final img.Image? image = img.decodeImage(bytes);
+  if (image == null) return bytes;
+  // Extremely aggressive payload dimension scaling for lighting-fast Cloud transit
+  final downscaled = img.copyResize(image, width: 800);
+  return Uint8List.fromList(img.encodeJpg(downscaled, quality: 70));
+}
+
 Future<List<int>> _process3x4Crop(List<dynamic> args) async {
   final String path = args[0] as String;
   final List<int> bytes = await File(path).readAsBytes();
