@@ -108,14 +108,12 @@ class CompositionResult {
   static String getSubjectSpecificTip(String subjectClass) {
     if (subjectClass.isEmpty || subjectClass == 'object' || subjectClass == 'foreground object') return "";
     final s = subjectClass.toLowerCase();
-    final cap = subjectClass[0].toUpperCase() + subjectClass.substring(1);
-    final prefix = "🎯 [$cap]: ";
 
     // 1. Portrait / People
     if (s.contains('person') || s.contains('human') || s.contains('man') || s.contains('woman') ||
         s.contains('boy') || s.contains('girl') || s.contains('face') || s.contains('smile') ||
         s.contains('clothing') || s.contains('portrait') || s.contains('selfie') || s.contains('crowd')) {
-      return prefix + ["Anchor the eyes near the upper third intersection.", "Focus sharply on the nearest eye.", "Leave slight lead room in the direction they are looking."][_rng.nextInt(3)];
+      return ["Anchor the eyes near the upper third intersection.", "Focus sharply on the nearest eye.", "Leave slight lead room in the direction they are looking."][_rng.nextInt(3)];
     }
     // 2. Wildlife / Pets
     else if (s.contains('animal') || s.contains('pet') || s.contains('dog') || s.contains('cat') ||
@@ -123,7 +121,7 @@ class CompositionResult {
         s.contains('cow') || s.contains('insect') || s.contains('reptile') || s.contains('frog') ||
         s.contains('rabbit') || s.contains('bear') || s.contains('lion') || s.contains('tiger') ||
         s.contains('elephant') || s.contains('duck') || s.contains('chicken') || s.contains('bee')) {
-      return prefix + ["Shoot at their exact eye level for a stronger emotional connection.", "Drop your camera height to match the animal's literal perspective."][_rng.nextInt(2)];
+      return ["Shoot at their exact eye level for a stronger emotional connection.", "Drop your camera height to match the animal's literal perspective."][_rng.nextInt(2)];
     }
     // 3. Architecture / Indoors / Structures
     else if (s.contains('building') || s.contains('architecture') || s.contains('house') ||
@@ -132,7 +130,7 @@ class CompositionResult {
         s.contains('wall') || s.contains('ceiling') || s.contains('corridor') || s.contains('tunnel') ||
         s.contains('church') || s.contains('temple') || s.contains('mosque') || s.contains('arch') ||
         s.contains('column') || s.contains('fence') || s.contains('gate') || s.contains('shed')) {
-      return prefix + ["Keep the camera vertical perfectly straight to avoid distortion.", "Look for geometric symmetry and leading lines in the structure."][_rng.nextInt(2)];
+      return ["Keep the camera vertical perfectly straight to avoid distortion.", "Look for geometric symmetry and leading lines in the structure."][_rng.nextInt(2)];
     }
     // 4. Culinary / Food & Drink
     else if (s.contains('food') || s.contains('meal') || s.contains('drink') || s.contains('fruit') ||
@@ -141,14 +139,14 @@ class CompositionResult {
         s.contains('cheese') || s.contains('salad') || s.contains('soup') || s.contains('tea') ||
         s.contains('wine') || s.contains('beer') || s.contains('sushi') || s.contains('chocolate') ||
         s.contains('cookie') || s.contains('sandwich') || s.contains('egg') || s.contains('pasta')) {
-      return prefix + ["Try a 45-degree angle or a flat-lay overhead for maximum impact.", "Move closer to capture the texture and detail of the dish."][_rng.nextInt(2)];
+      return ["Try a 45-degree angle or a flat-lay overhead for maximum impact.", "Move closer to capture the texture and detail of the dish."][_rng.nextInt(2)];
     }
     // 5. Automotive / Vehicles / Transport
     else if (s.contains('car') || s.contains('vehicle') || s.contains('truck') || s.contains('bicycle') ||
         s.contains('motorcycle') || s.contains('boat') || s.contains('airplane') || s.contains('train') ||
         s.contains('bus') || s.contains('scooter') || s.contains('taxi') || s.contains('ship') ||
         s.contains('helicopter') || s.contains('tire') || s.contains('wheel') || s.contains('engine')) {
-      return prefix + ["Leave lead room in front to imply forward motion.", "Shoot low to make the vehicle look more powerful and dominant."][_rng.nextInt(2)];
+      return ["Leave lead room in front to imply forward motion.", "Shoot low to make the vehicle look more powerful and dominant."][_rng.nextInt(2)];
     }
     // 6. Landscape / Nature / Weather
     else if (s.contains('tree') || s.contains('plant') || s.contains('flower') || s.contains('water') ||
@@ -158,7 +156,7 @@ class CompositionResult {
         s.contains('sunrise') || s.contains('snow') || s.contains('rain') || s.contains('fog') ||
         s.contains('leaf') || s.contains('grass') || s.contains('rock') || s.contains('stone') ||
         s.contains('waterfall') || s.contains('field') || s.contains('valley') || s.contains('volcano')) {
-      return prefix + ["Place the horizon on the upper or lower third, never the center.", "Find a strong foreground element to add depth and context."][_rng.nextInt(2)];
+      return ["Place the horizon on the upper or lower third, never the center.", "Find a strong foreground element to add depth and context."][_rng.nextInt(2)];
     }
     // 7. Sports / Action / Fitness
     else if (s.contains('sport') || s.contains('ball') || s.contains('run') || s.contains('jump') ||
@@ -166,7 +164,7 @@ class CompositionResult {
         s.contains('gym') || s.contains('workout') || s.contains('soccer') || s.contains('basketball') ||
         s.contains('tennis') || s.contains('golf') || s.contains('boxing') || s.contains('ski') ||
         s.contains('surf') || s.contains('climb') || s.contains('race') || s.contains('athlete')) {
-      return prefix + ["Anticipate the movement and leave lead room in front of the action.", "Use a fast shutter speed — freeze the decisive peak moment."][_rng.nextInt(2)];
+      return ["Anticipate the movement and leave lead room in front of the action.", "Use a fast shutter speed — freeze the decisive peak moment."][_rng.nextInt(2)];
     }
     // 8. Technology / Electronics / Gadgets
     else if (s.contains('computer') || s.contains('phone') || s.contains('laptop') || s.contains('tablet') ||
@@ -174,54 +172,54 @@ class CompositionResult {
         s.contains('tv') || s.contains('television') || s.contains('camera') || s.contains('headphone') ||
         s.contains('speaker') || s.contains('watch') || s.contains('robot') || s.contains('drone') ||
         s.contains('printer') || s.contains('microphone') || s.contains('controller') || s.contains('charger')) {
-      return prefix + ["Seek a clean, minimal background to isolate the product.", "Shoot at a 45-degree angle to reveal depth and screen reflections naturally."][_rng.nextInt(2)];
+      return ["Seek a clean, minimal background to isolate the product.", "Shoot at a 45-degree angle to reveal depth and screen reflections naturally."][_rng.nextInt(2)];
     }
     // 9. Fashion / Accessories
     else if (s.contains('shoe') || s.contains('bag') || s.contains('hat') || s.contains('glasses') ||
         s.contains('jewelry') || s.contains('necklace') || s.contains('ring') || s.contains('dress') ||
         s.contains('jacket') || s.contains('shirt') || s.contains('watch') || s.contains('sunglasses') ||
         s.contains('belt') || s.contains('wallet') || s.contains('umbrella') || s.contains('scarf')) {
-      return prefix + ["Use a clean, neutral surface to let the accessory become the hero.", "Shoot from multiple angles — above, side, and 45-degree."][_rng.nextInt(2)];
+      return ["Use a clean, neutral surface to let the accessory become the hero.", "Shoot from multiple angles — above, side, and 45-degree."][_rng.nextInt(2)];
     }
     // 10. Household / Furniture / Interior
     else if (s.contains('chair') || s.contains('table') || s.contains('bed') || s.contains('desk') ||
         s.contains('sofa') || s.contains('couch') || s.contains('shelf') || s.contains('lamp') ||
         s.contains('mirror') || s.contains('curtain') || s.contains('rug') || s.contains('vase') ||
         s.contains('candle') || s.contains('clock') || s.contains('frame') || s.contains('pot')) {
-      return prefix + ["Use wide-angle framing to show context — let the environment tell the story.", "Find a natural light source nearby and position the subject near it."][_rng.nextInt(2)];
+      return ["Use wide-angle framing to show context — let the environment tell the story.", "Find a natural light source nearby and position the subject near it."][_rng.nextInt(2)];
     }
     // 11. Tools / Hardware / Industrial
     else if (s.contains('tool') || s.contains('hammer') || s.contains('wrench') || s.contains('drill') ||
         s.contains('saw') || s.contains('bolt') || s.contains('cable') || s.contains('pipe') ||
         s.contains('instrument') || s.contains('machine') || s.contains('equipment') || s.contains('gear')) {
-      return prefix + ["Get extremely close to highlight texture and mechanical detail.", "Dramatic low-angle shots make industrial subjects look powerful."][_rng.nextInt(2)];
+      return ["Get extremely close to highlight texture and mechanical detail.", "Dramatic low-angle shots make industrial subjects look powerful."][_rng.nextInt(2)];
     }
     // 12. Books / Stationery / Art
     else if (s.contains('book') || s.contains('pen') || s.contains('paper') || s.contains('notebook') ||
         s.contains('painting') || s.contains('sculpture') || s.contains('art') || s.contains('drawing') ||
         s.contains('canvas') || s.contains('pencil') || s.contains('brush') || s.contains('poster')) {
-      return prefix + ["A flat-lay top-down composition works beautifully for stationery.", "Use soft diffused side-lighting to avoid harsh reflections on flat surfaces."][_rng.nextInt(2)];
+      return ["A flat-lay top-down composition works beautifully for stationery.", "Use soft diffused side-lighting to avoid harsh reflections on flat surfaces."][_rng.nextInt(2)];
     }
     // 13. Containers / Packaging
     else if (s.contains('bottle') || s.contains('cup') || s.contains('bowl') || s.contains('box') ||
         s.contains('jar') || s.contains('can') || s.contains('package') || s.contains('bag') ||
         s.contains('glass') || s.contains('tray') || s.contains('container') || s.contains('bucket')) {
-      return prefix + ["Position the label or branded side directly toward the camera.", "A side-lit shot reveals the shape and volume of containers best."][_rng.nextInt(2)];
+      return ["Position the label or branded side directly toward the camera.", "A side-lit shot reveals the shape and volume of containers best."][_rng.nextInt(2)];
     }
     // 14. Musical Instruments
     else if (s.contains('guitar') || s.contains('piano') || s.contains('violin') || s.contains('drum') ||
         s.contains('flute') || s.contains('trumpet') || s.contains('saxophone') || s.contains('harp') ||
         s.contains('music') || s.contains('instrument') || s.contains('keyboard') || s.contains('bass')) {
-      return prefix + ["Capture the instrument with the player for added storytelling energy.", "Close-up details of strings or keys make beautifully intimate shots."][_rng.nextInt(2)];
+      return ["Capture the instrument with the player for added storytelling energy.", "Close-up details of strings or keys make beautifully intimate shots."][_rng.nextInt(2)];
     }
     // 15. Medical / Science / Lab
     else if (s.contains('medical') || s.contains('hospital') || s.contains('lab') || s.contains('science') ||
         s.contains('microscope') || s.contains('chemical') || s.contains('medicine') || s.contains('doctor') ||
         s.contains('nurse') || s.contains('syringe') || s.contains('pill') || s.contains('specimen')) {
-      return prefix + ["Sterile, clean backgrounds communicate precision — use white or grey.", "Macro shots reveal details science depends on — go as close as possible."][_rng.nextInt(2)];
+      return ["Sterile, clean backgrounds communicate precision — use white or grey.", "Macro shots reveal details science depends on — go as close as possible."][_rng.nextInt(2)];
     }
     // Universal Catch-All — unknown or rare ML Kit labels still get a tip
-    return prefix + ["Use the Rule of Thirds to place it off-center for a dynamic composition.", "Balance the visual weight across the frame to create a natural sense of harmony."][_rng.nextInt(2)];
+    return ["Use the Rule of Thirds to place it off-center for a dynamic composition.", "Balance the visual weight across the frame to create a natural sense of harmony."][_rng.nextInt(2)];
   }
 
   static String generateProfessionalSuggestion(List<RuleResult> activeRules, double nima, String subjectClass) {

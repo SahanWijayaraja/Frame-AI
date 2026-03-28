@@ -89,9 +89,6 @@ class CameraOverlayPainter extends CustomPainter {
 
     // Corner L-marks
     _corners(canvas, l, t, r, b);
-
-    // Label
-    _label(canvas, subject!.className, Offset(l + 4, t - 16));
   }
 
   void _corners(Canvas canvas, double l, double t, double r, double b) {
