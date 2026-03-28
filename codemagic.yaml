@@ -10,6 +10,8 @@ workflows:
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
+      - name: Compile OS Launcher Icons
+        script: dart run flutter_launcher_icons
       - name: Build APK
         script: flutter build apk --debug --dart-define=GEMINI_API_KEY=$GEMINI_API_KEY
     artifacts:

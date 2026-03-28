@@ -299,8 +299,6 @@ class _CameraScreenState extends State<CameraScreen>
         children: [
           Row(
             children: [
-              Image.asset('assets/logo.png', width: 22, height: 22),
-              const SizedBox(width: 8),
               const Text('FrameAI',
                   style: TextStyle(
                     color: Color(0xFFFF6B2B), fontSize: 18,
@@ -769,11 +767,11 @@ class GeminiCritiqueScreen extends StatelessWidget {
         backgroundColor: Colors.black,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: Row(
+        title: const Row(
           children: [
-            Image.asset('assets/logo.png', width: 22, height: 22),
-            const SizedBox(width: 12),
-            const Text('Gemini AI Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Icon(Icons.cloud_sync, color: Color(0xFFFF6B2B)),
+            SizedBox(width: 12),
+            Text('Gemini AI Coach', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
