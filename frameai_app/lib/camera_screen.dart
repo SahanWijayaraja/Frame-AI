@@ -497,14 +497,16 @@ class _CameraScreenState extends State<CameraScreen>
         child: Stack(children: [
           // Rule of thirds grid (always on, even during freeze)
           Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _gridAnim,
-              builder: (_, __) => CustomPaint(
-                painter: CameraOverlayPainter(
-                  result:    _result,
-                  subject:   _liveSubject,
-                  showGrid:  true,
-                  animValue: _gridAnim.value,
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _gridAnim,
+                builder: (_, __) => CustomPaint(
+                  painter: CameraOverlayPainter(
+                    result:    _result,
+                    subject:   _liveSubject,
+                    showGrid:  true,
+                    animValue: _gridAnim.value,
+                  ),
                 ),
               ),
             ),
