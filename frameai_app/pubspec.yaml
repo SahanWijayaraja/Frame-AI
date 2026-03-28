@@ -31,3 +31,4 @@ flutter:
     - assets/models/deeplabv3.tflite
     - assets/models/midas_small.tflite
     - assets/models/nima_mobilenet.tflite
+    - assets/logo.png

@@ -53,6 +53,13 @@ Keep the tone expert, concise, and highly encouraging. Use emojis to make it rea
       return response.text ?? '';
     } catch (e) {
       final errorStr = e.toString();
+      
+      // Native offline network trap
+      final lowerErr = errorStr.toLowerCase();
+      if (lowerErr.contains('socketexception') || lowerErr.contains('failed host lookup') || lowerErr.contains('network is unreachable')) {
+        throw Exception("📶 **No Internet Connection:**\n\nPlease connect to Wi-Fi or Cellular Data to receive a professional Cloud Critique.");
+      }
+      
       if (errorStr.contains('Quota exceeded') || errorStr.contains('limit: 0') || errorStr.contains('429')) {
         throw Exception("⚠️ **Cloud Limit Reached:**\n\nYour Google account is currently geo-blocked from the Free Tier (Quota: 0), or you have completely exhausted your daily requests. \n\nPlease attach a billing account on Google AI Studio to increase your quota limits.");
       }
