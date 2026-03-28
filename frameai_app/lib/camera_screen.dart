@@ -398,85 +398,80 @@ class _CameraScreenState extends State<CameraScreen>
           height: uiH,
           child: AspectRatio(
             aspectRatio: 3 / 4,
-            child: ClipRect(
-              child: _frozenFrame != null
-                ? RawImage(image: _frozenFrame!, fit: BoxFit.cover)
-                : OverflowBox(
-                    alignment: Alignment.center,
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width:  _controller!.value.previewSize?.height ?? uiW,
-                        height: _controller!.value.previewSize?.width  ?? uiH,
-                        child: Builder(
-                          builder: (ctx) => GestureDetector(
-                            onScaleStart: (details) {
-                              if (_frozenFrame != null) return;
-                              _baseZoom = _currentZoom;
-                            },
-                            onScaleUpdate: (details) async {
-                              if (_frozenFrame != null || _controller == null) return;
-                              double newZoom = (_baseZoom * details.scale).clamp(_minZoom, _maxZoom);
-                              if (newZoom != _currentZoom) {
-                                setState(() => _currentZoom = newZoom);
-                                await _controller!.setZoomLevel(newZoom);
-                              }
-                            },
-                            onTapDown: (details) async {
-                              if (_frozenFrame != null || _controller == null) return;
-                              
-                              // Map physical screen coordinates perfectly into native camera sensor 0.0-1.0 ranges
-                              final RenderBox box = ctx.findRenderObject() as RenderBox;
-                              final localOffset = box.globalToLocal(details.globalPosition);
-                              
-                              final double width = box.size.width;
-                              final double height = box.size.height;
-                              
-                              final double relativeX = localOffset.dx / width;
-                              final double relativeY = localOffset.dy / height;
-                              final point = Offset(relativeX.clamp(0.0, 1.0), relativeY.clamp(0.0, 1.0));
-                              
-                              setState(() {
-                                _focusPoint = localOffset;
-                                _showFocusRing = true;
-                              });
-                              
-                              try {
-                                await _controller!.setFocusPoint(point);
-                                await _controller!.setFocusMode(FocusMode.auto);
-                                // Bind exposure directly to focal area natively copying iOS optics
-                                await _controller!.setExposurePoint(point);
-                                await _controller!.setExposureMode(ExposureMode.auto);
-                                
-                                Future.delayed(const Duration(milliseconds: 1000), () {
-                                  if (mounted) setState(() => _showFocusRing = false);
-                                });
-                              } catch (_) {}
-                            },
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                CameraPreview(_controller!),
-                                // Beautiful aesthetic tap-ring projection mimicking the iPhone iOS physical camera UI
-                                if (_showFocusRing && _focusPoint != null)
-                                  Positioned(
-                                    left: _focusPoint!.dx - 30,
-                                    top: _focusPoint!.dy - 30,
-                                    child: Container(
-                                      width: 60, height: 60,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: const Color(0xFFFFD600), width: 1.5),
-                                      ),
-                                    ),
-                                  ),
-                              ],
+            child: Builder(
+              builder: (ctx) => GestureDetector(
+                onScaleStart: (details) {
+                  if (_frozenFrame != null) return;
+                  _baseZoom = _currentZoom;
+                },
+                onScaleUpdate: (details) async {
+                  if (_frozenFrame != null || _controller == null) return;
+                  double newZoom = (_baseZoom * details.scale).clamp(_minZoom, _maxZoom);
+                  if (newZoom != _currentZoom) {
+                    setState(() => _currentZoom = newZoom);
+                    await _controller!.setZoomLevel(newZoom);
+                  }
+                },
+                onTapDown: (details) async {
+                  if (_frozenFrame != null || _controller == null) return;
+                  
+                  final RenderBox box = ctx.findRenderObject() as RenderBox;
+                  final localOffset = box.globalToLocal(details.globalPosition);
+                  
+                  final double relativeX = (localOffset.dx / box.size.width).clamp(0.0, 1.0);
+                  final double relativeY = (localOffset.dy / box.size.height).clamp(0.0, 1.0);
+                  final point = Offset(relativeX, relativeY);
+                  
+                  setState(() {
+                    _focusPoint = localOffset;
+                    _showFocusRing = true;
+                  });
+                  
+                  try {
+                    await _controller!.setFocusPoint(point);
+                    await _controller!.setFocusMode(FocusMode.auto);
+                    await _controller!.setExposurePoint(point);
+                    await _controller!.setExposureMode(ExposureMode.auto);
+                    
+                    Future.delayed(const Duration(milliseconds: 1000), () {
+                      if (mounted) setState(() => _showFocusRing = false);
+                    });
+                  } catch (_) {}
+                },
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRect(
+                      child: _frozenFrame != null
+                        ? RawImage(image: _frozenFrame!, fit: BoxFit.cover)
+                        : OverflowBox(
+                            alignment: Alignment.center,
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width:  _controller!.value.previewSize?.height ?? uiW,
+                                height: _controller!.value.previewSize?.width  ?? uiH,
+                                child: CameraPreview(_controller!),
+                              ),
                             ),
+                          ),
+                    ),
+                    // Focus ring overlay at screen coordinates
+                    if (_showFocusRing && _focusPoint != null)
+                      Positioned(
+                        left: _focusPoint!.dx - 30,
+                        top: _focusPoint!.dy - 30,
+                        child: Container(
+                          width: 60, height: 60,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFFFFD600), width: 1.5),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

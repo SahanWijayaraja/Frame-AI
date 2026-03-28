@@ -105,121 +105,390 @@ class CompositionResult {
     return ["Utilize reflections or archways for symmetry.", "Center perfectly if aiming symmetric."][_rng.nextInt(2)];
   }
 
+  static const Map<String, String> _tips = {
+    // ── People & Body ──
+    'person': 'Anchor the eyes on the upper-third intersection for a striking portrait.',
+    'human': 'Focus sharply on the nearest eye and blur the background.',
+    'man': 'Use strong side-lighting to emphasize masculine jawline and features.',
+    'woman': 'Soft diffused light flatters skin — avoid harsh midday sun.',
+    'boy': 'Capture candid moments — children look best when unposed.',
+    'girl': 'Get down to their eye level for a more intimate, genuine perspective.',
+    'face': 'Fill the frame with the face for powerful emotional impact.',
+    'smile': 'Catch genuine smiles — shoot in burst mode during conversation.',
+    'selfie': 'Hold the camera slightly above eye level for a flattering angle.',
+    'crowd': 'Use a wide lens and find a high vantage point to capture the full energy.',
+    'baby': 'Use natural window light and keep the background simple and clean.',
+    'child': 'Shoot at their eye level — never from above.',
+    'portrait': 'Use shallow depth of field to separate the subject from the background.',
+    'clothing': 'Ensure the fabric texture is visible — use angled side-lighting.',
+    'beard': 'Side-light to reveal texture and shape of facial hair.',
+    'hair': 'Backlight can create a beautiful rim glow around hair strands.',
+    'hand': 'Photograph hands in action — holding or creating something makes them alive.',
+    'finger': 'Macro mode reveals incredible detail in close-up hand shots.',
+    'skin': 'Soft, even lighting minimizes imperfections in skin photography.',
+    'eye': 'Get as close as possible — the iris has stunning detail at macro range.',
+    'muscle': 'Hard directional light creates dramatic shadows on muscles.',
+    'body': 'Use leading lines to draw attention to the pose and form.',
+    'arm': 'Capture arms in motion for dynamic, powerful compositions.',
+    'leg': 'Low angles elongate legs and give a sense of power.',
+    'fashion': 'Clean negative space lets the outfit become the hero of the frame.',
+    'wedding': 'Capture emotions over poses — the candid tears and laughter.',
+    'dancer': 'Use a fast shutter speed to freeze mid-leap elegance.',
+    'athlete': 'Anticipate peak action and shoot in continuous burst mode.',
+
+    // ── Animals & Wildlife ──
+    'dog': 'Get down to the dog\'s eye level — it creates an instant emotional bond.',
+    'cat': 'Cats photograph best in natural window light. Wait patiently for the perfect pose.',
+    'bird': 'Use a long focal length and keep the bird\'s eye razor sharp.',
+    'fish': 'Minimize reflections on aquarium glass by pressing the lens against it.',
+    'horse': 'Shoot slightly from below to emphasize the horse\'s majestic stature.',
+    'cow': 'Frame the animal against open pasture for a classic rural composition.',
+    'insect': 'Use macro mode — get within inches to reveal invisible wing patterns.',
+    'reptile': 'Side-lighting reveals the incredible texture of scales beautifully.',
+    'frog': 'Get level with the water surface for a dramatic half-submerged perspective.',
+    'rabbit': 'Soft, warm-toned light suits the gentle nature of small mammals.',
+    'bear': 'Keep your distance and use a telephoto lens — fill the frame safely.',
+    'lion': 'Capture the mane backlit by golden hour sun for a majestic portrait.',
+    'tiger': 'Focus on the eyes — they are the anchor of every predator portrait.',
+    'elephant': 'Wide-angle can capture scale when you emphasize the massive body against the sky.',
+    'duck': 'Shoot at water level to capture reflections alongside the subject.',
+    'chicken': 'Morning light brings out vibrant feather colors naturally.',
+    'bee': 'Use continuous autofocus and shoot in burst mode on flowers.',
+    'butterfly': 'Approach slowly and shoot from above to display the full wing pattern.',
+    'spider': 'Macro mode with side-light reveals web details impossibly well.',
+    'ant': 'Use the absolute closest macro distance to make tiny subjects monumental.',
+    'snake': 'Shoot from a low angle to create a dramatic sense of the animal.',
+    'wolf': 'Backlight through dust or mist creates atmosphere around wild canines.',
+    'deer': 'Early morning fog adds a magical quality to wildlife captures.',
+    'eagle': 'Pan smoothly to track flight — use a fast shutter for sharp wing detail.',
+    'owl': 'Low light conditions suit owl photography — use high ISO and wide aperture.',
+    'penguin': 'Capture group behavior for storytelling — isolation shots for portraits.',
+    'dolphin': 'Anticipate the jump — pre-focus on the water surface ahead of the animal.',
+    'whale': 'Wide shots capture the massive scale against the ocean horizon.',
+    'shark': 'Underwater clarity depends on shooting upward toward surface light.',
+    'parrot': 'The vibrant colors pop against a dark or blurred green background.',
+    'hamster': 'Tiny subjects need macro lenses — fill the frame with the face.',
+    'turtle': 'Underwater shots benefit from shooting slightly upward toward the light.',
+    'monkey': 'Focus on the eyes and hands — they convey emotion powerfully.',
+    'gorilla': 'Black fur needs careful exposure — overexpose slightly to retain detail.',
+    'zebra': 'The stripe pattern is the star — frame tightly to emphasize the graphic quality.',
+    'giraffe': 'Vertical compositions suit the tall frame naturally.',
+    'panda': 'Expose for the white patches to avoid blowing out highlights.',
+    'peacock': 'Wait for the full fan display — backlight makes the feathers glow.',
+    'flamingo': 'Reflections in still water double the visual impact — include them.',
+    'crab': 'Beach light is harsh — shoot during golden hour for warm tones.',
+    'jellyfish': 'Dark backgrounds make translucent bodies glow dramatically.',
+    'pet': 'Get at their eye level and use treats behind the camera for attention.',
+    'animal': 'Patience is key — wait for the animal to look directly at the lens.',
+    'wildlife': 'Use natural light and never use flash — it disturbs wild animals.',
+    'puppy': 'Shoot in burst mode — puppies are too fast for single shots.',
+    'kitten': 'Window light and a simple blanket is all you need for stunning kitten shots.',
+
+    // ── Architecture & Structures ──
+    'building': 'Keep vertical lines straight — tilt distortion ruins architectural shots.',
+    'house': 'Include landscaping for context — shoot in golden hour for warm tones.',
+    'architecture': 'Look for geometric patterns, symmetry, and repeating elements.',
+    'bridge': 'Shoot from below to emphasize the engineering and create drama.',
+    'tower': 'Vertical panorama captures the full height with maximum impact.',
+    'skyscraper': 'Look straight up from the base for a dramatic converging-lines composition.',
+    'church': 'Interior shots benefit from high ISO and no flash to preserve the ambient mood.',
+    'temple': 'Frame the entrance symmetrically — temples are designed for balanced viewing.',
+    'mosque': 'Capture the geometric tile patterns in detail alongside the structure.',
+    'castle': 'Low angles make fortifications look imposing and dominant.',
+    'monument': 'Include people for scale — monuments feel grander with human reference.',
+    'statue': 'Strong side-light creates dramatic shadows that reveal sculptural form.',
+    'fountain': 'Use a slow shutter speed to blur the water into silky streams.',
+    'window': 'Shoot toward the window from inside for dramatic silhouette portraits.',
+    'door': 'Centered framing works perfectly — doors are natural symmetry points.',
+    'wall': 'Texture photography demands raking side-light at extreme angles.',
+    'ceiling': 'Point straight up and center the pattern for graphic impact.',
+    'corridor': 'Leading lines converge naturally — place the subject at the vanishing point.',
+    'tunnel': 'Expose for the light at the end — let the tunnel walls go dark.',
+    'stair': 'Spiral staircases shot from above create hypnotic geometric patterns.',
+    'arch': 'Use the arch as a natural frame for whatever lies beyond it.',
+    'column': 'Repeating columns create rhythm — shoot at an angle to show depth.',
+    'fence': 'Shallow depth of field with a fence in the foreground creates beautiful bokeh.',
+    'gate': 'Frame your subject through the gate opening for a layered composition.',
+    'roof': 'Rooftops work best as foreground elements against dramatic skies.',
+    'shed': 'Rustic structures look best in warm, late-afternoon directional light.',
+    'room': 'Wide-angle lens from a corner captures maximum interior space.',
+    'furniture': 'Style the scene before shooting — remove clutter for clean interiors.',
+    'barn': 'Barns glow beautifully during blue hour with interior lights on.',
+    'lighthouse': 'Include the beam at dusk — long exposure can capture the light sweep.',
+    'pier': 'Use the pier as a leading line pointing into the horizon.',
+    'stadium': 'Wide-angle from high seats captures the atmosphere of the full venue.',
+
+    // ── Food & Drink ──
+    'food': 'Shoot from 45 degrees or directly overhead for the most appetizing look.',
+    'meal': 'Style the full place setting — cutlery and napkins add production value.',
+    'fruit': 'Water droplets on fruit surfaces catch light beautifully — mist them first.',
+    'vegetable': 'Group vegetables by color gradient for a visually stunning flat-lay.',
+    'coffee': 'Capture steam rising against a dark background for cozy atmosphere.',
+    'tea': 'Overhead flat-lays with teacups, leaves, and books tell a complete story.',
+    'cake': 'Slice and show the interior layers — texture is the star in pastry shots.',
+    'pizza': 'The cheese pull shot requires one person lifting while you shoot at table level.',
+    'burger': 'Stack height matters — shoot at exact eye level with the patty.',
+    'bread': 'Rustic wooden boards and flour dust create artisan bakery atmosphere.',
+    'cheese': 'Warm side-lighting emphasizes the creamy texture and color variations.',
+    'salad': 'Overhead shots let you showcase the full arrangement of colors.',
+    'soup': 'Steam and a garnish sprig transform a plain bowl into a hero shot.',
+    'sushi': 'Clean white or black surfaces emphasize the precision of Japanese cuisine.',
+    'chocolate': 'Melting chocolate needs to be shot quickly — have your angle pre-planned.',
+    'cookie': 'Stack cookies and shoot at a 20-degree angle for depth.',
+    'sandwich': 'Cross-section cuts reveal the fillings — the most appetizing angle.',
+    'egg': 'Backlight makes the yolk glow when broken open.',
+    'pasta': 'Twirl pasta on a fork and freeze the action mid-lift.',
+    'dessert': 'Desserts are art — treat them like product photography with intentional lighting.',
+    'wine': 'Backlight through the glass reveals deep ruby and gold tones beautifully.',
+    'beer': 'Capture condensation droplets on the glass — mist with a spray bottle.',
+    'drink': 'Dark backgrounds make colorful cocktails pop dramatically.',
+    'plate': 'Negative space around the plate keeps the focus on the food.',
+    'ice cream': 'Shoot quickly before it melts — pre-focus and have lighting set.',
+
+    // ── Vehicles & Transport ──
+    'car': 'Leave lead room in front of the car to imply forward motion.',
+    'truck': 'Low angles make trucks look imposing and dominant — shoot from knee height.',
+    'bicycle': 'Frame the bicycle against urban architecture for lifestyle context.',
+    'motorcycle': 'Three-quarter front angles show the most detail of the body shape.',
+    'boat': 'Include the water reflection — calm water doubles the visual impact.',
+    'airplane': 'Panning with the aircraft creates dramatic motion blur in the background.',
+    'train': 'Leading lines from the rails create powerful vanishing point compositions.',
+    'bus': 'Motion blur of a passing bus against a static background is dynamic.',
+    'helicopter': 'Shoot from below against the sky — rotor blur adds energy.',
+    'ship': 'Dawn and dusk give ships the most dramatic silhouette against the horizon.',
+    'taxi': 'Night city shots with taxi headlights create atmospheric urban energy.',
+    'scooter': 'Street-level panning shots create excellent motion blur backgrounds.',
+    'vehicle': 'Eye-level with the headlights is the most dynamic car photography angle.',
+    'tire': 'Macro detail shots of tire tread reveal impressive mechanical texture.',
+    'wheel': 'Chrome wheels pop when side-lit — avoid direct overhead light.',
+    'engine': 'Clean the surface first — engine detail photography demands pristine subjects.',
+
+    // ── Nature & Landscape ──
+    'tree': 'Shoot upward through the canopy for dramatic perspective.',
+    'plant': 'Soft backlight makes leaves glow translucently — shoot toward the light.',
+    'flower': 'Get below the flower and shoot upward against the sky for drama.',
+    'water': 'Long exposure turns moving water into smooth, silky streams.',
+    'sky': 'Include an interesting foreground — sky alone rarely makes a strong image.',
+    'mountain': 'Use foreground rocks or wildflowers to create depth in landscape shots.',
+    'cloud': 'Polarizing filters deepen blue skies and make clouds pop dramatically.',
+    'sea': 'Slow shutter speeds create misty, dreamlike ocean surfaces.',
+    'river': 'Find a bend in the river and use it as a leading line into the distance.',
+    'lake': 'Still water morning reflections create perfect mirror compositions.',
+    'forest': 'Fog in forests creates atmosphere — shoot during early morning.',
+    'desert': 'Leading lines from sand dune ridges create powerful minimalist compositions.',
+    'beach': 'Low tide reveals textures — shoot during golden hour for warm sand tones.',
+    'sunset': 'Expose for the sky, let the foreground silhouette for maximum drama.',
+    'sunrise': 'Arrive 30 minutes early — the best light is before the sun clears the horizon.',
+    'snow': 'Overexpose by +1 EV to keep snow white instead of grey.',
+    'rain': 'Backlight reveals individual rain drops — shoot toward a light source.',
+    'fog': 'Simplify the composition — fog isolates subjects naturally.',
+    'leaf': 'Backlit leaves glow with incredible inner color and vein detail.',
+    'grass': 'Shoot through grass blades for a blurry foreground framing effect.',
+    'rock': 'Wet rocks have richer color — shoot after rain.',
+    'stone': 'Low raking light across stone surfaces reveals texture beautifully.',
+    'waterfall': 'Use a 1-2 second exposure to create silky water while keeping rocks sharp.',
+    'field': 'Golden hour side-light across a field creates long, dramatic shadows.',
+    'valley': 'Elevated viewpoints capture the full sweep and depth of valleys.',
+    'volcano': 'Blue hour with lava glow creates the most dramatic volcanic shots.',
+    'garden': 'Shoot after rain — droplets catch light on petals beautifully.',
+    'pond': 'Include lily pads or reflections for layered, rich compositions.',
+    'cave': 'Expose for the cave entrance light — let the interior go dark for drama.',
+    'cliff': 'Include a person on the edge for scale that emphasizes height.',
+    'coral': 'Underwater macro reveals colors invisible to the naked eye.',
+    'mushroom': 'Get at ground level for the most dramatic mushroom perspective.',
+    'moss': 'Macro mode reveals a miniature forest world in moss patches.',
+    'landscape': 'Strong foreground, middle ground, and background create depth.',
+    'nature': 'Patience is the most powerful tool — wait for the perfect light.',
+
+    // ── Sports & Action ──
+    'sport': 'Anticipate the peak moment and pre-focus on the spot it will happen.',
+    'ball': 'Freeze the ball mid-air with a fast shutter speed.',
+    'soccer': 'Shoot from the corner flag position for dramatic angle on goal shots.',
+    'basketball': 'Capture the peak height of a jump shot from a low angle.',
+    'tennis': 'Side-on to the baseline captures powerful serve motion.',
+    'golf': 'The follow-through swing is the most aesthetic moment to freeze.',
+    'boxing': 'Ringside angles capture impact — use burst mode for knockout sequences.',
+    'swim': 'Underwater housings or splash-proof setups capture the best aquatic action.',
+    'dance': 'Slow shutter with flash creates sharp subject with motion-blurred limbs.',
+    'gym': 'Hard directional light from the side emphasizes muscle definition.',
+    'workout': 'Shoot from low angles to make the athlete look powerful.',
+    'ski': 'Follow the skier down the slope with continuous tracking focus.',
+    'surf': 'Water housing or a long telephoto from the beach captures spray and power.',
+    'climb': 'Shoot from below to emphasize height and the drama of the ascent.',
+    'race': 'Panning at slow shutter speeds creates dramatic streaked backgrounds.',
+    'run': 'Freeze mid-stride with 1/1000s or faster shutter speed.',
+    'jump': 'Shoot at the apex of the jump when the subject is momentarily still.',
+    'action': 'Pre-focus on where the action will happen and shoot in burst mode.',
+    'game': 'Capture the emotional reactions — celebration and defeat tell the story.',
+    'yoga': 'Clean backgrounds and soft light complement the flowing poses.',
+    'martial arts': 'Freeze the kick at full extension for maximum impact.',
+    'skateboard': 'Low angles with a wide lens exaggerate the height of tricks.',
+    'cycling': 'Pan with the cyclist — sharp subject, blurred background equals speed.',
+
+    // ── Technology & Electronics ──
+    'computer': 'Clean the screen and use it as a soft light source in dark environments.',
+    'phone': 'Shoot at a slight angle to avoid direct screen reflections.',
+    'laptop': 'Open at 90 degrees and shoot from the keyboard side for product shots.',
+    'tablet': 'Display compelling content on the screen to add context to the shot.',
+    'keyboard': 'Angled macro shots of keycaps reveal satisfying texture detail.',
+    'mouse': 'Side-lighting on a dark surface creates dramatic product photography.',
+    'monitor': 'Turn off to shoot the design, or display content for lifestyle shots.',
+    'screen': 'Matching the screen color temperature to your lights eliminates color casts.',
+    'tv': 'Photograph the TV as part of the room setup — not as an isolated object.',
+    'television': 'Include the viewing area for a lifestyle scene composition.',
+    'camera': 'Mirror or reflective surfaces make camera gear photography tricky — use matte backgrounds.',
+    'headphone': 'Suspend headphones on a stand — floating subjects look premium.',
+    'speaker': 'Dramatic low-key lighting suits the sleek industrial design of audio gear.',
+    'watch': 'Set the time to 10:10 — it frames the logo and looks aesthetically balanced.',
+    'robot': 'Eye-level perspective humanizes robotic subjects.',
+    'drone': 'Capture with the propellers spinning using a slower shutter speed.',
+    'printer': 'Include the printed output emerging for an action-in-progress shot.',
+    'microphone': 'Dramatic spotlight from one side creates a studio-feel product shot.',
+    'controller': 'Flat-lay with complementary gaming accessories for a lifestyle setup.',
+    'charger': 'Minimalist product shots on white surfaces suit tech accessories.',
+
+    // ── Fashion & Accessories ──
+    'shoe': 'Shoot at ground level — the shoe\'s own perspective is more engaging.',
+    'bag': 'Style the bag with contents partially visible for lifestyle context.',
+    'hat': 'Photograph on a model or a quality hat stand — never flat on a table.',
+    'glasses': 'Avoid reflections by angling the glasses slightly off-axis to the camera.',
+    'jewelry': 'Macro lens reveals gemstone facets invisible to the naked eye.',
+    'necklace': 'Drape on a dark velvet surface for maximum sparkle contrast.',
+    'ring': 'Prop the ring in flowers or textured fabric for romantic context.',
+    'dress': 'Movement shots — spinning or walking — show how fabric flows.',
+    'jacket': 'Hang on a quality hanger with the shape stuffed for clean form.',
+    'shirt': 'Flat-lay with complementary accessories tells a style story.',
+    'sunglasses': 'Reflections in the lenses showing the scene add a creative dimension.',
+    'belt': 'Coil artfully on a leather surface for a premium flat-lay.',
+    'wallet': 'Slightly open to show the interior craftsmanship.',
+    'umbrella': 'Rain photography with an umbrella in use tells a powerful weather story.',
+    'scarf': 'Flowing scarves in wind create dynamic, organic movement in the frame.',
+    'boots': 'Muddy boots on a trail tell an adventure story instantly.',
+    'tie': 'Tight crop on the knot detail for texture-focused product photography.',
+    'gloves': 'Photograph gloves in use — gripping a mug or touching snow.',
+
+    // ── Household & Interior ──
+    'chair': 'Natural light from a nearby window is the best light for furniture shots.',
+    'table': 'Overhead flat-lay from directly above showcases table settings best.',
+    'bed': 'Messy beds with morning light tell a cozy lifestyle story.',
+    'desk': 'Clean up and curate the objects — minimalist desk setups photograph best.',
+    'sofa': 'Include throw pillows and blankets for warmth and texture.',
+    'couch': 'Photograph from a 45-degree angle to show both depth and width.',
+    'shelf': 'Style the shelves symmetrically before shooting — order creates calm.',
+    'lamp': 'Turn the lamp on in a dim room — it becomes both subject and light source.',
+    'mirror': 'Shoot at an angle to avoid your own reflection in the mirror.',
+    'curtain': 'Sheer curtains with backlight create ethereal, dreamy atmosphere.',
+    'rug': 'Flat-lay from directly above shows the full pattern.',
+    'vase': 'Side-lighting on ceramics reveals the glaze texture beautifully.',
+    'candle': 'Dim room + candle flame = atmospheric low-light mood photography.',
+    'clock': 'Set it to a meaningful time for added storytelling depth.',
+    'pot': 'Kitchen pots look best with steam rising out of them during cooking.',
+    'towel': 'Rolled or folded neatly with spa elements for a lifestyle shot.',
+    'pillow': 'Soft diffused light complements the softness of textile subjects.',
+    'blanket': 'Drape casually over furniture for a lived-in, cozy composition.',
+
+    // ── Tools & Industrial ──
+    'tool': 'Arrange tools neatly on a workbench — the organized chaos aesthetic.',
+    'hammer': 'Action shots mid-strike create powerful dynamic compositions.',
+    'wrench': 'Oil and metal reflections add grit and character to tool photography.',
+    'drill': 'Show the drill bit tip in sharp macro for technical detail shots.',
+    'saw': 'Sawdust particles frozen mid-air with flash create stunning action shots.',
+    'bolt': 'Extreme macro reveals threading detail invisible to the naked eye.',
+    'cable': 'Coil neatly or show in dynamic tangles — both tell different stories.',
+    'pipe': 'Industrial pipes create powerful leading lines and geometric patterns.',
+    'machine': 'Include the operator for scale and human interest.',
+    'equipment': 'Clean industrial equipment first — dust kills product photography.',
+    'gear': 'Interlocking gears shot in macro reveal mesmerizing mechanical beauty.',
+
+    // ── Books, Art & Stationery ──
+    'book': 'Fan the pages with side-light for a dreamy, literary atmosphere.',
+    'pen': 'Macro reveals the craftsmanship of a fine pen — show the nib detail.',
+    'paper': 'Crumpled paper with dramatic side-light creates incredible texture.',
+    'notebook': 'Flat-lay with coffee and a pen for a workspace storytelling shot.',
+    'painting': 'Match your lighting to the painting\'s mood — cool for blue, warm for gold.',
+    'sculpture': 'Walk around it and find the most dynamic angle before shooting.',
+    'art': 'Shoot art straight-on and parallel to avoid keystoning distortion.',
+    'drawing': 'Include the artist\'s tools next to the drawing for context.',
+    'canvas': 'Angled lighting reveals brushstroke texture for authentic fine art documentation.',
+    'pencil': 'Group colored pencils in gradient for satisfying graphic compositions.',
+    'brush': 'Paint-loaded brushes mid-stroke create dynamic art-action shots.',
+    'poster': 'Photograph in context on a wall — not flat on a table.',
+
+    // ── Containers & Packaging ──
+    'bottle': 'Backlight through colored glass creates stunning luminous effects.',
+    'cup': 'Steam or latte art makes coffee cup shots irresistible.',
+    'bowl': 'Overhead shots with garnish and surrounding ingredients create food context.',
+    'box': 'Open boxes with tissue paper suggest luxury unboxing experiences.',
+    'jar': 'Side-lighting through glass jars reveals the contents beautifully.',
+    'can': 'Water droplets on a cold can add refreshing appeal.',
+    'glass': 'Backlight makes the liquid glow — dark backgrounds maximize the effect.',
+    'tray': 'Arrange items on the tray with intentional spacing for balanced compositions.',
+    'container': 'Show containers in their natural use context for lifestyle relevance.',
+    'bucket': 'Fill with ice and bottles for a classic refreshment scene.',
+
+    // ── Musical Instruments ──
+    'guitar': 'Shoot the neck stretching away for dramatic perspective.',
+    'piano': 'Black and white keys demand careful exposure — meter for midtones.',
+    'violin': 'The S-curves of a violin body are inherently photogenic from any angle.',
+    'drum': 'Freeze drumstick impact with flash for explosive action captures.',
+    'flute': 'Reflections along the metal body create beautiful abstract highlights.',
+    'trumpet': 'Brass instruments glow under warm tungsten light.',
+    'saxophone': 'Include the player for storytelling — jazz clubs add atmosphere.',
+    'harp': 'Backlight through the strings creates a magical ethereal glow.',
+    'music': 'Capture the emotion on the musician\'s face — technique is secondary.',
+    'bass': 'Low angles suit low-frequency instruments — shoot from below.',
+
+    // ── Medical & Science ──
+    'medical': 'Clean white backgrounds communicate clinical precision.',
+    'hospital': 'Respect privacy — capture the environment, not patient identities.',
+    'lab': 'Reflections in glassware create compelling abstract science imagery.',
+    'science': 'Macro mode reveals molecular and crystalline worlds invisible to the eye.',
+    'microscope': 'Include the eyepiece view as an inset for context.',
+    'medicine': 'Precise arrangement on white surfaces creates pharmaceutical aesthetics.',
+    'doctor': 'Environmental portraits in their workspace tell a professional story.',
+    'nurse': 'Candid action shots during care convey compassion and dedication.',
+    'syringe': 'Extreme close-up of the needle tip is dramatic at macro scale.',
+    'pill': 'Color-code pills on white for graphic medical stock imagery.',
+
+    // ── Miscellaneous Objects ──
+    'flag': 'Wind-blown flags need fast shutter speeds to freeze the fabric shape.',
+    'sign': 'Shoot straight-on and level — signs demand square, parallel framing.',
+    'toy': 'Get at the toy\'s scale — shoot from its eye level for a miniature world.',
+    'doll': 'Treat it like a portrait — focus on the eyes, blur the background.',
+    'key': 'Macro photography makes everyday keys look like ancient artifacts.',
+    'coin': 'Side-lighting reveals embossed detail on coin surfaces.',
+    'map': 'Flat-lay with travel accessories for an adventure-planning composition.',
+    'trophy': 'Polish first, then side-light to create dramatic metallic reflections.',
+    'medal': 'Macro on the engraving detail with the ribbon draped artfully.',
+    'badge': 'Include the uniform or context for storytelling relevance.',
+    'rope': 'Coiled rope with nautical context creates rustic maritime atmosphere.',
+    'chain': 'Individual links in macro reveal surprising mechanical beauty.',
+    'basket': 'Fill with seasonal items — flowers, fruit, bread — for lifestyle context.',
+    'carpet': 'Raking light at extreme angles reveals carpet pile and pattern texture.',
+    'balloon': 'Groups against blue sky create joyful, colorful compositions.',
+    'kite': 'Include the string and the person flying it for the full story.',
+    'tent': 'Interior glow at dusk against a star-filled sky is photography gold.',
+    'backpack': 'Adventure context — trail, mountain, or airport — tells the story.',
+    'suitcase': 'Open with clothes spilling out for a travel preparation narrative.',
+    'mat': 'Yoga mats with props create wellness and fitness lifestyle compositions.',
+    'sticker': 'Macro reveals printing detail and adhesive edges at close range.',
+    'tape': 'Translucent tape against light creates interesting abstract studies.',
+  };
+
   static String getSubjectSpecificTip(String subjectClass) {
     if (subjectClass.isEmpty || subjectClass == 'object' || subjectClass == 'foreground object') return "";
     final s = subjectClass.toLowerCase();
-
-    // 1. Portrait / People
-    if (s.contains('person') || s.contains('human') || s.contains('man') || s.contains('woman') ||
-        s.contains('boy') || s.contains('girl') || s.contains('face') || s.contains('smile') ||
-        s.contains('clothing') || s.contains('portrait') || s.contains('selfie') || s.contains('crowd')) {
-      return ["Anchor the eyes near the upper third intersection.", "Focus sharply on the nearest eye.", "Leave slight lead room in the direction they are looking."][_rng.nextInt(3)];
+    
+    // 1. Direct HashMap lookup (O(1) instant match)
+    if (_tips.containsKey(s)) return _tips[s]!;
+    
+    // 2. Substring fallback for compound labels like "golden retriever" → matches "dog" etc.
+    for (final entry in _tips.entries) {
+      if (s.contains(entry.key)) return entry.value;
     }
-    // 2. Wildlife / Pets
-    else if (s.contains('animal') || s.contains('pet') || s.contains('dog') || s.contains('cat') ||
-        s.contains('bird') || s.contains('fish') || s.contains('wildlife') || s.contains('horse') ||
-        s.contains('cow') || s.contains('insect') || s.contains('reptile') || s.contains('frog') ||
-        s.contains('rabbit') || s.contains('bear') || s.contains('lion') || s.contains('tiger') ||
-        s.contains('elephant') || s.contains('duck') || s.contains('chicken') || s.contains('bee')) {
-      return ["Shoot at their exact eye level for a stronger emotional connection.", "Drop your camera height to match the animal's literal perspective."][_rng.nextInt(2)];
-    }
-    // 3. Architecture / Indoors / Structures
-    else if (s.contains('building') || s.contains('architecture') || s.contains('house') ||
-        s.contains('room') || s.contains('furniture') || s.contains('window') || s.contains('bridge') ||
-        s.contains('stair') || s.contains('tower') || s.contains('skyscraper') || s.contains('door') ||
-        s.contains('wall') || s.contains('ceiling') || s.contains('corridor') || s.contains('tunnel') ||
-        s.contains('church') || s.contains('temple') || s.contains('mosque') || s.contains('arch') ||
-        s.contains('column') || s.contains('fence') || s.contains('gate') || s.contains('shed')) {
-      return ["Keep the camera vertical perfectly straight to avoid distortion.", "Look for geometric symmetry and leading lines in the structure."][_rng.nextInt(2)];
-    }
-    // 4. Culinary / Food & Drink
-    else if (s.contains('food') || s.contains('meal') || s.contains('drink') || s.contains('fruit') ||
-        s.contains('coffee') || s.contains('plate') || s.contains('vegetable') || s.contains('dessert') ||
-        s.contains('cake') || s.contains('pizza') || s.contains('burger') || s.contains('bread') ||
-        s.contains('cheese') || s.contains('salad') || s.contains('soup') || s.contains('tea') ||
-        s.contains('wine') || s.contains('beer') || s.contains('sushi') || s.contains('chocolate') ||
-        s.contains('cookie') || s.contains('sandwich') || s.contains('egg') || s.contains('pasta')) {
-      return ["Try a 45-degree angle or a flat-lay overhead for maximum impact.", "Move closer to capture the texture and detail of the dish."][_rng.nextInt(2)];
-    }
-    // 5. Automotive / Vehicles / Transport
-    else if (s.contains('car') || s.contains('vehicle') || s.contains('truck') || s.contains('bicycle') ||
-        s.contains('motorcycle') || s.contains('boat') || s.contains('airplane') || s.contains('train') ||
-        s.contains('bus') || s.contains('scooter') || s.contains('taxi') || s.contains('ship') ||
-        s.contains('helicopter') || s.contains('tire') || s.contains('wheel') || s.contains('engine')) {
-      return ["Leave lead room in front to imply forward motion.", "Shoot low to make the vehicle look more powerful and dominant."][_rng.nextInt(2)];
-    }
-    // 6. Landscape / Nature / Weather
-    else if (s.contains('tree') || s.contains('plant') || s.contains('flower') || s.contains('water') ||
-        s.contains('sky') || s.contains('mountain') || s.contains('nature') || s.contains('landscape') ||
-        s.contains('cloud') || s.contains('sea') || s.contains('river') || s.contains('lake') ||
-        s.contains('forest') || s.contains('desert') || s.contains('beach') || s.contains('sunset') ||
-        s.contains('sunrise') || s.contains('snow') || s.contains('rain') || s.contains('fog') ||
-        s.contains('leaf') || s.contains('grass') || s.contains('rock') || s.contains('stone') ||
-        s.contains('waterfall') || s.contains('field') || s.contains('valley') || s.contains('volcano')) {
-      return ["Place the horizon on the upper or lower third, never the center.", "Find a strong foreground element to add depth and context."][_rng.nextInt(2)];
-    }
-    // 7. Sports / Action / Fitness
-    else if (s.contains('sport') || s.contains('ball') || s.contains('run') || s.contains('jump') ||
-        s.contains('action') || s.contains('game') || s.contains('swim') || s.contains('dance') ||
-        s.contains('gym') || s.contains('workout') || s.contains('soccer') || s.contains('basketball') ||
-        s.contains('tennis') || s.contains('golf') || s.contains('boxing') || s.contains('ski') ||
-        s.contains('surf') || s.contains('climb') || s.contains('race') || s.contains('athlete')) {
-      return ["Anticipate the movement and leave lead room in front of the action.", "Use a fast shutter speed — freeze the decisive peak moment."][_rng.nextInt(2)];
-    }
-    // 8. Technology / Electronics / Gadgets
-    else if (s.contains('computer') || s.contains('phone') || s.contains('laptop') || s.contains('tablet') ||
-        s.contains('keyboard') || s.contains('mouse') || s.contains('monitor') || s.contains('screen') ||
-        s.contains('tv') || s.contains('television') || s.contains('camera') || s.contains('headphone') ||
-        s.contains('speaker') || s.contains('watch') || s.contains('robot') || s.contains('drone') ||
-        s.contains('printer') || s.contains('microphone') || s.contains('controller') || s.contains('charger')) {
-      return ["Seek a clean, minimal background to isolate the product.", "Shoot at a 45-degree angle to reveal depth and screen reflections naturally."][_rng.nextInt(2)];
-    }
-    // 9. Fashion / Accessories
-    else if (s.contains('shoe') || s.contains('bag') || s.contains('hat') || s.contains('glasses') ||
-        s.contains('jewelry') || s.contains('necklace') || s.contains('ring') || s.contains('dress') ||
-        s.contains('jacket') || s.contains('shirt') || s.contains('watch') || s.contains('sunglasses') ||
-        s.contains('belt') || s.contains('wallet') || s.contains('umbrella') || s.contains('scarf')) {
-      return ["Use a clean, neutral surface to let the accessory become the hero.", "Shoot from multiple angles — above, side, and 45-degree."][_rng.nextInt(2)];
-    }
-    // 10. Household / Furniture / Interior
-    else if (s.contains('chair') || s.contains('table') || s.contains('bed') || s.contains('desk') ||
-        s.contains('sofa') || s.contains('couch') || s.contains('shelf') || s.contains('lamp') ||
-        s.contains('mirror') || s.contains('curtain') || s.contains('rug') || s.contains('vase') ||
-        s.contains('candle') || s.contains('clock') || s.contains('frame') || s.contains('pot')) {
-      return ["Use wide-angle framing to show context — let the environment tell the story.", "Find a natural light source nearby and position the subject near it."][_rng.nextInt(2)];
-    }
-    // 11. Tools / Hardware / Industrial
-    else if (s.contains('tool') || s.contains('hammer') || s.contains('wrench') || s.contains('drill') ||
-        s.contains('saw') || s.contains('bolt') || s.contains('cable') || s.contains('pipe') ||
-        s.contains('instrument') || s.contains('machine') || s.contains('equipment') || s.contains('gear')) {
-      return ["Get extremely close to highlight texture and mechanical detail.", "Dramatic low-angle shots make industrial subjects look powerful."][_rng.nextInt(2)];
-    }
-    // 12. Books / Stationery / Art
-    else if (s.contains('book') || s.contains('pen') || s.contains('paper') || s.contains('notebook') ||
-        s.contains('painting') || s.contains('sculpture') || s.contains('art') || s.contains('drawing') ||
-        s.contains('canvas') || s.contains('pencil') || s.contains('brush') || s.contains('poster')) {
-      return ["A flat-lay top-down composition works beautifully for stationery.", "Use soft diffused side-lighting to avoid harsh reflections on flat surfaces."][_rng.nextInt(2)];
-    }
-    // 13. Containers / Packaging
-    else if (s.contains('bottle') || s.contains('cup') || s.contains('bowl') || s.contains('box') ||
-        s.contains('jar') || s.contains('can') || s.contains('package') || s.contains('bag') ||
-        s.contains('glass') || s.contains('tray') || s.contains('container') || s.contains('bucket')) {
-      return ["Position the label or branded side directly toward the camera.", "A side-lit shot reveals the shape and volume of containers best."][_rng.nextInt(2)];
-    }
-    // 14. Musical Instruments
-    else if (s.contains('guitar') || s.contains('piano') || s.contains('violin') || s.contains('drum') ||
-        s.contains('flute') || s.contains('trumpet') || s.contains('saxophone') || s.contains('harp') ||
-        s.contains('music') || s.contains('instrument') || s.contains('keyboard') || s.contains('bass')) {
-      return ["Capture the instrument with the player for added storytelling energy.", "Close-up details of strings or keys make beautifully intimate shots."][_rng.nextInt(2)];
-    }
-    // 15. Medical / Science / Lab
-    else if (s.contains('medical') || s.contains('hospital') || s.contains('lab') || s.contains('science') ||
-        s.contains('microscope') || s.contains('chemical') || s.contains('medicine') || s.contains('doctor') ||
-        s.contains('nurse') || s.contains('syringe') || s.contains('pill') || s.contains('specimen')) {
-      return ["Sterile, clean backgrounds communicate precision — use white or grey.", "Macro shots reveal details science depends on — go as close as possible."][_rng.nextInt(2)];
-    }
-    // Universal Catch-All — unknown or rare ML Kit labels still get a tip
-    return ["Use the Rule of Thirds to place it off-center for a dynamic composition.", "Balance the visual weight across the frame to create a natural sense of harmony."][_rng.nextInt(2)];
+    
+    // 3. Universal catch-all
+    return "Use the Rule of Thirds to place the subject off-center for a dynamic composition.";
   }
 
   static String generateProfessionalSuggestion(List<RuleResult> activeRules, double nima, String subjectClass) {
