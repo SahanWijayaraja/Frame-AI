@@ -2,3 +2,4 @@ flutter/
 android-sdk/
 cmdtools.zip
 .vscode/
+.env
