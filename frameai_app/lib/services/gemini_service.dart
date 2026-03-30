@@ -20,21 +20,17 @@ Keep the tone expert, concise, and highly encouraging. Use emojis to make it rea
 ''';
 
   static String get _obfuscatedKey {
-    // Hidden from static Google Cloud public repo regex scanners
-    const p1 = 'AIzaSyC';
-    const p2 = 'Fm-kammpE';
-    const p3 = 'coJYDz8KD';
-    const p4 = 'IUBHDKA';
-    const p5 = 'efavaAU';
-    return '$p1$p2$p3$p4$p5';
+    // SECURITY: Real API keys must be injected via --dart-define=GEMINI_API_KEY=YOUR_KEY during build.
+    // This static fallback is just a dummy placeholder to prevent crashes.
+    return 'YOUR_GEMINI_API_KEY_HERE';
   }
 
   /// Fetches the entire markdown response in one single API request.
   static Future<String> getStaticCritique(Uint8List imageBytes) async {
-    var apiKey = String.fromEnvironment('GEMINI_API_KEY');
+    var apiKey = const String.fromEnvironment('GEMINI_API_KEY');
     
-    // Fallback exactly to the obfuscated static key if Codemagic flags fail
-    if (apiKey.isEmpty || apiKey.contains('ENTER_YOUR')) {
+    // Fallback to the dummy static key if build flags are missing
+    if (apiKey.isEmpty || apiKey == 'YOUR_GEMINI_API_KEY_HERE') {
       apiKey = _obfuscatedKey;
     }
 
